@@ -21,7 +21,7 @@ class PejabatHrApp extends StatelessWidget {
     return StoreScope(
       store: store,
       child: MaterialApp(
-        title: 'Pejabat HR',
+        title: 'Amin Studio HR',
         debugShowCheckedModeBanner: false,
         theme: buildTheme(Brightness.light),
         darkTheme: buildTheme(Brightness.dark),

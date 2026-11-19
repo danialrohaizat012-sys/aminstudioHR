@@ -1,4 +1,4 @@
-// Data model for Pejabat HR.
+// Data model for Amin Studio HR.
 //
 // Every record serialises to plain JSON so the local store can persist it,
 // and so a remote backend (Supabase, Firebase, REST) can replace it later
@@ -371,7 +371,7 @@ class PayRun {
 
 class CompanySettings {
   CompanySettings({
-    this.name = 'Syarikat Contoh Sdn Bhd',
+    this.name = 'Amin Photo Studio',
     this.startTime = '09:00',
     this.weekendFriSat = false,
     List<String>? holidays,

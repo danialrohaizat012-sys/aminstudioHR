@@ -1,4 +1,4 @@
-# Pejabat HR (Flutter)
+# Amin Studio HR (Flutter)
 
 Aplikasi mudah alih HR untuk SME Malaysia: kehadiran, cuti, tuntutan, lebih masa, kelulusan, penggajian (KWSP, PERKESO, SIP, PCB) dan slip gaji. Satu kod untuk Android, iOS dan web.
 
@@ -46,3 +46,11 @@ Data disimpan dalam peranti (`shared_preferences`). "Set semula data demo" di sk
 ## Prototaip web
 
 `prototype/pejabat-hr.html` ialah versi web satu halaman yang mendahului app ini (papan utama, kelulusan, penggajian, analitik, log audit dan pembantu AI). Ia direka untuk dijalankan sebagai Artifact di claude.ai dan menyimpan data melalui runtime itu; dibuka terus dalam pelayar, ia berjalan dalam mod demo.
+
+## Deploy ke Vercel
+
+Projek Vercel yang disambung ke repo ini membina versi web secara automatik setiap kali `main` dikemas kini. `vercel.json` memasang Flutter (versi dalam `scripts/vercel-install.sh`) semasa build dan menerbitkan `build/web`. Tiada tetapan tambahan diperlukan di papan pemuka Vercel; biarkan Framework Preset sebagai "Other".
+
+## Jenama
+
+Logo Amin Studio (kamera dengan huruf A dalam lensa) dilukis semula daripada signboard kedai. Sumber SVG ada dalam `docs/brand/`: `mark-rounded.svg` untuk web dan Android, `mark-full.svg` untuk iOS, `mark-maskable.svg` untuk ikon adaptif. Warna: kuning `#FFCE00`, hitam `#141414`, merah `#E0241B`.

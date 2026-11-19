@@ -90,8 +90,8 @@ class Avatar extends StatelessWidget {
   final double radius;
 
   static const _shades = [
-    Color(0xFF1F5BD8), Color(0xFF0E7AC4), Color(0xFF2948B8), Color(0xFF0F8FA8),
-    Color(0xFF3B6FD8), Color(0xFF1565A8),
+    Color(0xFF141414), Color(0xFFC21F17), Color(0xFF3A3A3A), Color(0xFF8A5A00),
+    Color(0xFF5B5B5B), Color(0xFF9E2A1E),
   ];
 
   @override

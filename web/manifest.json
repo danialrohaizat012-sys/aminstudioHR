@@ -1,11 +1,11 @@
 {
-    "name": "pejabat_hr",
-    "short_name": "pejabat_hr",
+    "name": "Amin Studio HR",
+    "short_name": "Amin HR",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFCE00",
+    "theme_color": "#141414",
+    "description": "Amin Studio HR: kehadiran, cuti, tuntutan dan gaji.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

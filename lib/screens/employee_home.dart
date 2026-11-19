@@ -6,6 +6,7 @@ import '../format.dart';
 import '../models.dart';
 import '../store.dart';
 import '../theme.dart';
+import '../widgets/brand.dart';
 import '../widgets/common.dart';
 import 'announcements_screen.dart';
 import 'payslips_screen.dart';
@@ -28,6 +29,9 @@ class EmployeeHome extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: 72,
+        leadingWidth: 64,
+        leading: const Padding(padding: EdgeInsets.only(left: 16), child: Center(child: BrandMark(size: 40))),
+        titleSpacing: 12,
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Hai, ${me.firstName}', style: t.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
           Text(longDate(store.now), style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),

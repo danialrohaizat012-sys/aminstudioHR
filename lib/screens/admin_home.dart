@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../format.dart';
 import '../store.dart';
+import '../widgets/brand.dart';
 import '../widgets/common.dart';
 import 'announcements_screen.dart';
 
@@ -35,6 +36,9 @@ class AdminHome extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: 72,
+        leadingWidth: 64,
+        leading: const Padding(padding: EdgeInsets.only(left: 16), child: Center(child: BrandMark(size: 40))),
+        titleSpacing: 12,
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Hari ini', style: t.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
           Text(longDate(store.now), style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),

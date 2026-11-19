@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../store.dart';
+import '../widgets/brand.dart';
 import '../widgets/common.dart';
 
 /// Demo sign-in: pick an account. A production build replaces this with
@@ -21,20 +22,7 @@ class LoginScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 40, 20, 24),
           children: [
-            Row(children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(color: cs.primary, borderRadius: BorderRadius.circular(12)),
-                alignment: Alignment.center,
-                child: Text('HR', style: TextStyle(color: cs.onPrimary, fontWeight: FontWeight.w800)),
-              ),
-              const SizedBox(width: 12),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Pejabat HR', style: t.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                Text(store.settings.name, style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-              ]),
-            ]),
+            const BrandLockup(markSize: 56),
             const SizedBox(height: 32),
             Text('Log masuk sebagai', style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),

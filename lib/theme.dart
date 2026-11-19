@@ -1,22 +1,29 @@
 import 'package:material_ui/material_ui.dart';
 
-/// Pejabat HR uses one blue for action and selection. Orange, green and red
-/// appear only for status (pending, approved, rejected, late).
-const brandBlue = Color(0xFF1F5BD8);
+/// Amin Studio palette, taken from the shop signboard: signboard yellow,
+/// ink black for actions, signage red for the wordmark. Green, amber and
+/// red tags still carry request status.
+const brandYellow = Color(0xFFFFCE00);
+const brandInk = Color(0xFF141414);
+const brandRed = Color(0xFFE0241B);
 
 ThemeData buildTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
   final scheme = ColorScheme.fromSeed(
-    seedColor: brandBlue,
+    seedColor: brandYellow,
     brightness: brightness,
   ).copyWith(
-    primary: dark ? const Color(0xFF8DB0FF) : brandBlue,
-    surface: dark ? const Color(0xFF141A26) : Colors.white,
-    surfaceContainerLowest: dark ? const Color(0xFF0C111D) : const Color(0xFFF5F6F8),
-    surfaceContainerLow: dark ? const Color(0xFF161D2A) : const Color(0xFFF5F6F8),
-    surfaceContainer: dark ? const Color(0xFF1A2130) : const Color(0xFFF2F4F7),
-    surfaceContainerHighest: dark ? const Color(0xFF242D3D) : const Color(0xFFEAECF0),
-    outlineVariant: dark ? const Color(0xFF283142) : const Color(0xFFE4E7EC),
+    primary: dark ? brandYellow : brandInk,
+    onPrimary: dark ? brandInk : Colors.white,
+    primaryContainer: dark ? const Color(0xFF4D3E00) : const Color(0xFFFFE680),
+    onPrimaryContainer: dark ? const Color(0xFFFFE680) : const Color(0xFF241C00),
+    surface: dark ? const Color(0xFF1B1A17) : Colors.white,
+    onSurface: dark ? const Color(0xFFF2EFE6) : brandInk,
+    surfaceContainerLowest: dark ? const Color(0xFF121210) : const Color(0xFFF7F6F1),
+    surfaceContainerLow: dark ? const Color(0xFF181715) : const Color(0xFFF7F6F1),
+    surfaceContainer: dark ? const Color(0xFF24231F) : const Color(0xFFF1EFE8),
+    surfaceContainerHighest: dark ? const Color(0xFF2E2C27) : const Color(0xFFE8E5DC),
+    outlineVariant: dark ? const Color(0xFF36342E) : const Color(0xFFE6E2D8),
   );
 
   final base = ThemeData(

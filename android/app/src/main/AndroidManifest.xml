@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="pejabat_hr"
+        android:label="Amin Studio HR"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
