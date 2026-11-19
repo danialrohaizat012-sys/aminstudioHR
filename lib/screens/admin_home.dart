@@ -1,0 +1,133 @@
+import 'package:material_ui/material_ui.dart';
+
+import '../format.dart';
+import '../store.dart';
+import '../widgets/common.dart';
+import 'announcements_screen.dart';
+
+/// HR manager's day: who is in, what needs a decision, payroll status.
+class AdminHome extends StatelessWidget {
+  const AdminHome({super.key, required this.onGo});
+  final void Function(int tab) onGo;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final today = ymd(store.now);
+    final staff = store.staff;
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final workday = store.isWorkday(store.now);
+
+    final present = staff.where((e) => store.attendanceOn(e.id, today)?.clockIn != null).toList();
+    final late = present.where((e) => store.isLate(store.attendanceOn(e.id, today)!)).length;
+    final leaveToday = store.onLeave(today);
+    final leaveIds = leaveToday.map((r) => r.empId).toSet();
+    final missing = workday
+        ? staff.where((e) => !present.contains(e) && !leaveIds.contains(e.id)).toList()
+        : <dynamic>[];
+    final pending = store.pending();
+    final month = ym(store.now);
+    final run = store.payrun(month);
+    final lines = run?.lines ?? store.draftLines(month);
+    final net = lines.fold(0.0, (s, l) => s + l.net);
+
+    return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: 72,
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Hari ini', style: t.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+          Text(longDate(store.now), style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+        ]),
+        actions: [
+          IconButton(
+            tooltip: 'Buat pengumuman',
+            onPressed: () => showAnnouncementForm(context),
+            icon: const Icon(Icons.campaign_outlined),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: PageList(children: [
+        FigureStrip(items: [
+          Figure(
+            label: 'Hadir',
+            value: '${present.length} / ${staff.length}',
+            progress: staff.isEmpty ? 0 : present.length / staff.length,
+          ),
+          Figure(label: 'Lewat', value: '$late', note: 'selepas ${store.settings.startTime}'),
+          Figure(label: 'Bercuti', value: '${leaveToday.length}', note: 'hari ini'),
+          Figure(
+            label: 'Menunggu kelulusan',
+            value: '${pending.length}',
+            note: pending.isEmpty ? 'semua selesai' : 'paling lama ${ago(pending.first.createdAt)}',
+            onTap: () => onGo(1),
+          ),
+        ]),
+        Section(
+          title: 'Menunggu kelulusan',
+          action: pending.length > 3 ? TextAction('Semua (${pending.length})', onPressed: () => onGo(1)) : null,
+          child: pending.isEmpty
+              ? const QuietText('Tiada permohonan menunggu.')
+              : Column(children: [
+                  for (var i = 0; i < pending.length && i < 3; i++) ...[
+                    if (i > 0) const Divider(),
+                    ApprovalTile(pending[i], showBalance: true),
+                  ],
+                ]),
+        ),
+        Section(
+          title: workday ? 'Belum punch masuk' : 'Kehadiran',
+          child: !workday
+              ? const QuietText('Hari ini hari rehat.')
+              : missing.isEmpty
+                  ? const QuietText('Semua pekerja sudah punch masuk.')
+                  : Column(children: [
+                      for (final e in missing)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(children: [
+                            Avatar(e),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                Text(e.name, style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                Text(e.dept, style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                              ]),
+                            ),
+                          ]),
+                        ),
+                    ]),
+        ),
+        if (leaveToday.isNotEmpty)
+          Section(
+            title: 'Bercuti hari ini',
+            child: Column(children: [
+              for (final r in leaveToday)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(children: [
+                    Avatar(store.employeeById(r.empId)),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(store.nameOf(r.empId), style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
+                    Text('${r.leaveType}, hingga ${fmtShort(r.to)}', style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                  ]),
+                ),
+            ]),
+          ),
+        Section(
+          title: 'Gaji ${monthLabel(month)}',
+          action: Tag(run == null ? 'Draf' : 'Dimuktamadkan', tone: run == null ? 'warn' : 'ok'),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(rm(net), style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -.5)),
+            Text('bersih untuk ${lines.length} pekerja', style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            run == null
+                ? FilledButton(onPressed: () => onGo(3), child: const Text('Semak dan muktamadkan'))
+                : OutlinedButton(onPressed: () => onGo(3), child: const Text('Lihat penggajian')),
+          ]),
+        ),
+      ]),
+    );
+  }
+}

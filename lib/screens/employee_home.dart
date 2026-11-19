@@ -1,0 +1,271 @@
+import 'dart:async';
+
+import 'package:material_ui/material_ui.dart';
+
+import '../format.dart';
+import '../models.dart';
+import '../store.dart';
+import '../theme.dart';
+import '../widgets/common.dart';
+import 'announcements_screen.dart';
+import 'payslips_screen.dart';
+import 'request_forms.dart';
+
+class EmployeeHome extends StatelessWidget {
+  const EmployeeHome({super.key, required this.onGo});
+  final void Function(int tab) onGo;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final me = store.me!;
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final recent = store.requestsOf(me.id).take(3).toList();
+    final slips = store.payslipsOf(me.id);
+    final anns = sortedAnnouncements(store);
+
+    return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: 72,
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Hai, ${me.firstName}', style: t.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+          Text(longDate(store.now), style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+        ]),
+      ),
+      body: PageList(children: [
+        const PunchCard(),
+        Row(children: [
+          Expanded(
+            child: FilledButton(
+              onPressed: () => showLeaveForm(context),
+              style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+              child: const Text('Mohon cuti'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => showClaimForm(context),
+              style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+              child: const Text('Tuntutan'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => showOvertimeForm(context),
+              style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8)),
+              child: const Text('Lebih masa'),
+            ),
+          ),
+        ]),
+        Section(
+          title: 'Baki cuti ${store.now.year}',
+          action: TextAction('Sejarah', onPressed: () => onGo(2)),
+          child: Column(children: [
+            for (final type in const ['Cuti Tahunan', 'Cuti Sakit']) _BalanceRow(empId: me.id, type: type),
+          ]),
+        ),
+        Section(
+          title: 'Slip gaji terakhir',
+          action: slips.isEmpty ? null : TextAction('Semua', onPressed: () => onGo(3)),
+          child: slips.isEmpty
+              ? const QuietText('Slip akan muncul selepas HR muktamadkan gaji bulanan.')
+              : InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => PayslipDetail(month: slips.first.$1, line: slips.first.$2))),
+                  child: Row(children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(rm(slips.first.$2.net),
+                            style: t.headlineSmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -.5)),
+                        Text('bersih · ${monthLabel(slips.first.$1)}',
+                            style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                      ]),
+                    ),
+                    const Icon(Icons.chevron_right),
+                  ]),
+                ),
+        ),
+        Section(
+          title: 'Permohonan saya',
+          action: recent.isEmpty ? null : TextAction('Semua', onPressed: () => onGo(2)),
+          child: recent.isEmpty
+              ? const QuietText('Belum ada permohonan.')
+              : Column(children: [
+                  for (final r in recent)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(children: [
+                        Icon(requestIcon(r.kind), size: 20, color: cs.onSurfaceVariant),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(requestTitle(r), style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                            Text(requestDetail(r), style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                          ]),
+                        ),
+                        StatusChip(r.status),
+                      ]),
+                    ),
+                ]),
+        ),
+        Section(
+          title: 'Pengumuman',
+          action: TextAction('Semua',
+              onPressed: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const AnnouncementsScreen()))),
+          child: anns.isEmpty
+              ? const QuietText('Belum ada pengumuman.')
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [for (final a in anns.take(2)) AnnouncementItem(a)],
+                ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _BalanceRow extends StatelessWidget {
+  const _BalanceRow({required this.empId, required this.type});
+  final String empId, type;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final e = store.employeeById(empId)!;
+    final ent = store.entitlement(e, type);
+    final bal = store.leaveBalance(empId, type) ?? 0;
+    final pend = store.usedLeave(empId, type, status: ReqStatus.pending);
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text(type, style: t.bodyMedium)),
+          Text.rich(TextSpan(children: [
+            TextSpan(text: daysLabel(bal).split(' ').first, style: const TextStyle(fontWeight: FontWeight.w700)),
+            TextSpan(text: ' / $ent hari', style: TextStyle(color: cs.onSurfaceVariant)),
+          ])),
+        ]),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(99),
+          child: LinearProgressIndicator(
+            value: ent == 0 ? 0 : (bal / ent).clamp(0, 1).toDouble(),
+            minHeight: 6,
+            backgroundColor: cs.surfaceContainer,
+          ),
+        ),
+        if (pend > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text('${daysLabel(pend)} menunggu kelulusan',
+                style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          ),
+      ]),
+    );
+  }
+}
+
+/// Live clock with punch in / punch out.
+class PunchCard extends StatefulWidget {
+  const PunchCard({super.key});
+
+  @override
+  State<PunchCard> createState() => _PunchCardState();
+}
+
+class _PunchCardState extends State<PunchCard> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 15), (_) => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final now = store.now;
+    final rec = store.attendanceOn(store.me!.id, ymd(now));
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final late = rec != null && store.isLate(rec);
+    final workday = store.isWorkday(now);
+
+    final status = rec?.clockIn == null
+        ? (workday ? 'Waktu mula kerja ${store.settings.startTime}' : 'Hari rehat')
+        : rec!.clockOut == null
+            ? 'Bekerja sejak ${rec.clockIn}${late ? ' · lewat' : ''}'
+            : 'Selesai · ${hoursBetween(rec.clockIn, rec.clockOut).toStringAsFixed(1)} jam';
+
+    Widget? button;
+    if (rec?.clockIn == null) {
+      button = FilledButton.icon(
+        onPressed: () => _act(context, true),
+        icon: const Icon(Icons.login, size: 20),
+        label: const Text('Punch masuk'),
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+      );
+    } else if (rec!.clockOut == null) {
+      button = FilledButton.icon(
+        onPressed: () => _act(context, false),
+        icon: const Icon(Icons.logout, size: 20),
+        label: const Text('Punch keluar'),
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+      );
+    }
+
+    Widget io(String label, String? v) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          Text(v ?? '—', style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+        ]);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Text(hm(now),
+                style: t.displaySmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -1.5, height: 1)),
+            const SizedBox(width: 20),
+            Container(width: 1, height: 36, color: cs.outlineVariant),
+            const SizedBox(width: 20),
+            io('Masuk', rec?.clockIn),
+            const SizedBox(width: 24),
+            io('Keluar', rec?.clockOut),
+          ]),
+          const SizedBox(height: 10),
+          Text(status,
+              style: t.bodyMedium?.copyWith(
+                  color: late ? statusColors(context, 'warn').fg : cs.onSurfaceVariant,
+                  fontWeight: late ? FontWeight.w600 : null)),
+          if (button != null) ...[const SizedBox(height: 12), button],
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _act(BuildContext context, bool clockIn) async {
+    final store = StoreScope.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    if (clockIn) {
+      await store.punchIn();
+    } else {
+      await store.punchOut();
+    }
+    messenger.showSnackBar(SnackBar(content: Text('${clockIn ? 'Punch masuk' : 'Punch keluar'} ${hm(store.now)}')));
+  }
+}
