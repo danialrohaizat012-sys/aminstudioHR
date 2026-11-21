@@ -66,6 +66,7 @@ class Employee {
     this.probationEnd,
     this.contractEnd,
     this.consentAt,
+    this.photo,
   });
 
   final String id;
@@ -77,6 +78,7 @@ class Employee {
   String? pinHash, pinSalt; // salted SHA-256 of the sign-in PIN, never the PIN itself
   String? probationEnd, contractEnd; // yyyy-mm-dd
   String? consentAt; // when the employee accepted the GPS/selfie privacy notice (PDPA)
+  String? photo; // profile picture, base64 JPEG
 
   /// Date of birth from a Malaysian IC (YYMMDD-PB-###G), or null.
   DateTime? get birthDate {
@@ -118,6 +120,7 @@ class Employee {
         'probationEnd': probationEnd,
         'contractEnd': contractEnd,
         'consentAt': consentAt,
+        'photo': photo,
       };
 
   factory Employee.fromJson(Map<String, dynamic> j) => Employee(
@@ -142,6 +145,7 @@ class Employee {
         probationEnd: j['probationEnd'],
         contractEnd: j['contractEnd'],
         consentAt: j['consentAt'],
+        photo: j['photo'],
       );
 }
 
@@ -167,6 +171,7 @@ class HrRequest {
     this.rate = 1.5,
     this.note = '',
     this.receipt,
+    this.decisionNote = '',
   });
 
   final String id;
@@ -191,11 +196,13 @@ class HrRequest {
 
   String note;
   String? receipt; // base64 JPEG of the claim receipt
+  String decisionNote; // manager's reason, mainly when rejecting
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'kind': kind.name,
         'receipt': receipt,
+        'decisionNote': decisionNote,
         'empId': empId,
         'createdAt': createdAt.toIso8601String(),
         'status': status.name,
@@ -233,6 +240,7 @@ class HrRequest {
         rate: (j['rate'] ?? 1.5).toDouble(),
         note: j['note'] ?? '',
         receipt: j['receipt'],
+        decisionNote: j['decisionNote'] ?? '',
       );
 }
 
@@ -409,14 +417,22 @@ class PayLine {
     required this.pcb,
     required this.claims,
     required this.net,
+    this.bonus = 0,
+    this.commission = 0,
+    this.extraAllowance = 0,
+    this.otherDeduction = 0,
+    this.adjustNote = '',
   });
 
   final String empId, name, position, ic, bank, bankAcc;
   final double basic, allowance, overtime, unpaidLeave, gross;
   final double epfEe, epfEr, socsoEe, socsoEr, eisEe, eisEr, pcb;
   final double claims, net;
+  final double bonus, commission, extraAllowance; // one-off earnings this month
+  final double otherDeduction; // e.g. salary advance repayment
+  final String adjustNote;
 
-  double get deductions => epfEe + socsoEe + eisEe + pcb;
+  double get deductions => epfEe + socsoEe + eisEe + pcb + otherDeduction;
   double get employerCost => gross + epfEr + socsoEr + eisEr + claims;
 
   Map<String, dynamic> toJson() => {
@@ -440,6 +456,11 @@ class PayLine {
         'pcb': pcb,
         'claims': claims,
         'net': net,
+        'bonus': bonus,
+        'commission': commission,
+        'extraAllowance': extraAllowance,
+        'otherDeduction': otherDeduction,
+        'adjustNote': adjustNote,
       };
 
   factory PayLine.fromJson(Map<String, dynamic> j) {
@@ -465,6 +486,11 @@ class PayLine {
       pcb: d('pcb'),
       claims: d('claims'),
       net: d('net'),
+      bonus: d('bonus'),
+      commission: d('commission'),
+      extraAllowance: d('extraAllowance'),
+      otherDeduction: d('otherDeduction'),
+      adjustNote: j['adjustNote'] ?? '',
     );
   }
 }
@@ -500,6 +526,7 @@ class CompanySettings {
     this.startTime = '09:00',
     this.endTime = '18:00',
     List<int>? weekendDays,
+    Map<String, String>? holidayNames,
     List<String>? holidays,
     this.officeLat,
     this.officeLng,
@@ -507,6 +534,7 @@ class CompanySettings {
     this.requireLocation = true,
     this.requireSelfie = true,
   })  : holidays = holidays ?? [],
+        holidayNames = holidayNames ?? {},
         weekendDays = weekendDays ?? [DateTime.friday];
 
   String name;
@@ -514,6 +542,7 @@ class CompanySettings {
   String endTime; // HH:mm, punch out before this is an early leave
   List<int> weekendDays; // DateTime.monday (1) .. DateTime.sunday (7); the shop closes on Friday
   List<String> holidays; // yyyy-mm-dd
+  Map<String, String> holidayNames; // yyyy-mm-dd -> name
 
   // Punch rules. The area check only applies once HR has set the office
   // location (Profil > Tetapan syarikat > Guna lokasi semasa).
@@ -530,6 +559,7 @@ class CompanySettings {
         'endTime': endTime,
         'weekendDays': weekendDays,
         'holidays': holidays,
+        'holidayNames': holidayNames,
         'officeLat': officeLat,
         'officeLng': officeLng,
         'radiusM': radiusM,
@@ -549,6 +579,7 @@ class CompanySettings {
                     ? [DateTime.saturday, DateTime.sunday]
                     : null,
         holidays: List<String>.from(j['holidays'] ?? const []),
+        holidayNames: Map<String, String>.from(j['holidayNames'] ?? const {}),
         officeLat: (j['officeLat'] as num?)?.toDouble(),
         officeLng: (j['officeLng'] as num?)?.toDouble(),
         radiusM: (j['radiusM'] as num?)?.toDouble() ?? 150,
@@ -570,4 +601,30 @@ class AuditEntry {
 
   factory AuditEntry.fromJson(Map<String, dynamic> j) =>
       AuditEntry(at: DateTime.parse(j['at']), by: j['by'] ?? '', action: j['action'] ?? '', detail: j['detail'] ?? '');
+}
+
+/// One-off pay items for one employee in one month, entered by HR before
+/// the month is finalised.
+class PayAdjustment {
+  PayAdjustment({this.bonus = 0, this.commission = 0, this.extraAllowance = 0, this.otherDeduction = 0, this.note = ''});
+  double bonus, commission, extraAllowance, otherDeduction;
+  String note;
+
+  bool get isEmpty => bonus == 0 && commission == 0 && extraAllowance == 0 && otherDeduction == 0;
+
+  Map<String, dynamic> toJson() => {
+        'bonus': bonus,
+        'commission': commission,
+        'extraAllowance': extraAllowance,
+        'otherDeduction': otherDeduction,
+        'note': note,
+      };
+
+  factory PayAdjustment.fromJson(Map<String, dynamic> j) => PayAdjustment(
+        bonus: (j['bonus'] ?? 0).toDouble(),
+        commission: (j['commission'] ?? 0).toDouble(),
+        extraAllowance: (j['extraAllowance'] ?? 0).toDouble(),
+        otherDeduction: (j['otherDeduction'] ?? 0).toDouble(),
+        note: j['note'] ?? '',
+      );
 }

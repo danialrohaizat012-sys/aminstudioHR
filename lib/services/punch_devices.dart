@@ -28,6 +28,9 @@ abstract class PunchDevices {
   /// A photo of a claim receipt as base64 JPEG, or null if cancelled.
   Future<String?> receipt();
 
+  /// A square-ish profile picture from the camera or gallery, base64 JPEG.
+  Future<String?> profilePhoto({required bool camera});
+
   /// Street address for a coordinate, or null when the lookup fails.
   Future<String?> address(double lat, double lng);
 
@@ -80,6 +83,19 @@ class DevicePunchDevices implements PunchDevices {
       maxWidth: 480,
       maxHeight: 480,
       imageQuality: 60,
+    );
+    if (file == null) return null;
+    return base64Encode(await file.readAsBytes());
+  }
+
+  @override
+  Future<String?> profilePhoto({required bool camera}) async {
+    final file = await ImagePicker().pickImage(
+      source: camera ? ImageSource.camera : ImageSource.gallery,
+      preferredCameraDevice: CameraDevice.front,
+      maxWidth: 400,
+      maxHeight: 400,
+      imageQuality: 75,
     );
     if (file == null) return null;
     return base64Encode(await file.readAsBytes());

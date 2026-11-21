@@ -55,7 +55,12 @@ class _ShellState extends State<Shell> {
     });
   }
 
-  void go(int i) => setState(() => index = i);
+  void go(int i) {
+    setState(() => index = i);
+    final store = StoreScope.of(context);
+    // Opening Permohonan clears the "new decision" badge.
+    if (!store.isAdmin && i == 2) store.markDecisionsSeen();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,7 +69,8 @@ class _ShellState extends State<Shell> {
     // rather than building screens that need a signed-in user.
     if (store.me == null) return const SizedBox.shrink();
     final admin = store.isAdmin;
-    final pendingCount = store.pending().length;
+    final pendingCount = store.pending().where((r) => r.empId != store.me!.id).length;
+    final unseen = admin ? 0 : store.unseenDecisions().length;
 
     final pages = admin
         ? <Widget>[
@@ -101,13 +107,7 @@ class _ShellState extends State<Shell> {
         : <(IconData, IconData, String, String, int)>[
             (Icons.home_outlined, Icons.home, 'Utama', 'Utama', 0),
             (Icons.schedule_outlined, Icons.schedule, 'Hadir', 'Kehadiran', 0),
-            (
-              Icons.assignment_outlined,
-              Icons.assignment,
-              'Mohon',
-              'Permohonan',
-              0
-            ),
+            (Icons.assignment_outlined, Icons.assignment, 'Mohon', 'Permohonan', unseen),
             (Icons.receipt_outlined, Icons.receipt, 'Slip', 'Slip gaji', 0),
             (Icons.person_outline, Icons.person, 'Profil', 'Profil', 0),
           ];

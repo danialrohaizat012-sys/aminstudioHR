@@ -30,6 +30,8 @@ class HrStore extends ChangeNotifier {
   List<AuditEntry> audit = [];
   Map<String, int> failedPins = {};
   Map<String, String> lockedUntil = {}; // empId -> ISO time
+  Map<String, PayAdjustment> adjustments = {}; // '<yyyy-mm>_<empId>'
+  Map<String, String> seenUpTo = {}; // empId -> ISO time the employee last opened their requests
 
   static const maxPinAttempts = 5;
   static const demoPin = '246810';
@@ -139,6 +141,88 @@ class HrStore extends ChangeNotifier {
   void _log(String action, [String detail = '']) {
     audit.insert(0, AuditEntry(at: now, by: me?.name ?? 'Sistem', action: action, detail: detail));
     if (audit.length > 500) audit.removeRange(500, audit.length);
+  }
+
+  /// Decisions on my requests I have not looked at yet.
+  List<HrRequest> unseenDecisions() {
+    final e = me;
+    if (e == null) return [];
+    final since = seenUpTo[e.id];
+    return requests
+        .where((r) =>
+            r.empId == e.id &&
+            r.decidedAt != null &&
+            (since == null || r.decidedAt!.isAfter(DateTime.parse(since))))
+        .toList();
+  }
+
+  Future<void> markDecisionsSeen() async {
+    if (me == null || unseenDecisions().isEmpty) return;
+    seenUpTo[me!.id] = now.toIso8601String();
+    await _commit();
+  }
+
+  /// Full years of service on [at] (default today).
+  static int serviceYears(Employee e, DateTime at) {
+    var y = at.year - e.joinDate.year;
+    if (at.month < e.joinDate.month || (at.month == e.joinDate.month && at.day < e.joinDate.day)) y--;
+    return y < 0 ? 0 : y;
+  }
+
+  /// Employment Act 1955 minimum paid leave for the length of service:
+  /// annual 8/12/16 days and sick 14/18/22 days (<2, 2–5, 5+ years).
+  static ({int annual, int sick}) statutoryLeave(Employee e, DateTime at) {
+    final y = serviceYears(e, at);
+    if (y < 2) return (annual: 8, sick: 14);
+    if (y < 5) return (annual: 12, sick: 18);
+    return (annual: 16, sick: 22);
+  }
+
+  /// Active employees whose leave entitlement is below the statutory minimum.
+  List<Employee> belowStatutoryLeave() => activeEmployees.where((e) {
+        final m = statutoryLeave(e, now);
+        return e.leaveAnnual < m.annual || e.leaveMedical < m.sick;
+      }).toList();
+
+  /// Days of [type] still available after approved and pending requests.
+  double? availableLeave(String empId, String type) {
+    final b = leaveBalance(empId, type);
+    return b == null ? null : b - usedLeave(empId, type, status: ReqStatus.pending);
+  }
+
+  Future<void> addHoliday(String date, String name) async {
+    if (!isAdmin) return;
+    if (!settings.holidays.contains(date)) settings.holidays.add(date);
+    settings.holidays.sort();
+    settings.holidayNames[date] = name;
+    _log('Tambah cuti umum', '$date $name');
+    await _commit();
+  }
+
+  Future<void> removeHoliday(String date) async {
+    if (!isAdmin) return;
+    settings.holidays.remove(date);
+    final name = settings.holidayNames.remove(date) ?? '';
+    _log('Buang cuti umum', '$date $name');
+    await _commit();
+  }
+
+  Future<void> deleteAnnouncement(String id) async {
+    if (!isAdmin) return;
+    final a = announcements.where((x) => x.id == id).firstOrNull;
+    if (a == null) return;
+    announcements.remove(a);
+    _log('Padam pengumuman', a.title);
+    await _commit();
+  }
+
+  /// Set or clear a profile picture: your own, or anyone's as a manager.
+  Future<void> setProfilePhoto(String empId, String? photo) async {
+    if (me == null || (empId != me!.id && !isAdmin)) return;
+    final e = employeeById(empId)!;
+    e.photo = photo;
+    if (empId != me!.id) _log(photo == null ? 'Buang gambar profil' : 'Tukar gambar profil', e.name);
+    await _commit();
   }
 
   Future<void> recordConsent() async {
@@ -289,7 +373,10 @@ class HrStore extends ChangeNotifier {
             r.status == ReqStatus.approved)
         .fold(0.0, (s, r) => s + _daysInMonth(r, month));
     final unpaid = round2(e.salary / 26 * unpaidDays);
-    final gross = round2(e.salary + e.allowance + ot - unpaid);
+    final adj = adjustments['${month}_${e.id}'] ?? PayAdjustment();
+    // Bonus and commission are treated as part of this month's wages for EPF,
+    // SOCSO, EIS and the simplified PCB.
+    final gross = round2(e.salary + e.allowance + ot + adj.bonus + adj.commission + adj.extraAllowance - unpaid);
     final st = statutory(gross);
     final ded = st.epfEe + st.socsoEe + st.eisEe + st.pcb;
     return PayLine(
@@ -312,7 +399,12 @@ class HrStore extends ChangeNotifier {
       eisEr: st.eisEr,
       pcb: st.pcb,
       claims: claims,
-      net: round2(gross - ded + claims),
+      net: round2(gross - ded - adj.otherDeduction + claims),
+      bonus: adj.bonus,
+      commission: adj.commission,
+      extraAllowance: adj.extraAllowance,
+      otherDeduction: adj.otherDeduction,
+      adjustNote: adj.note,
     );
   }
 
@@ -569,6 +661,9 @@ class HrStore extends ChangeNotifier {
         out.add(Reminder(date: a, title: '$years tahun ${e.firstName} bersama syarikat', empId: e.id));
       }
     }
+    for (final e in belowStatutoryLeave()) {
+      out.add(Reminder(date: today, title: 'Cuti ${e.firstName} bawah minimum Akta Kerja', empId: e.id, tone: 'warn'));
+    }
     out.sort((a, b) => a.date.compareTo(b.date));
     return out;
   }
@@ -588,6 +683,9 @@ class HrStore extends ChangeNotifier {
     String? half,
     String note = '',
   }) async {
+    final days = leaveDays(from, to, from == to ? half : null);
+    final avail = availableLeave(me!.id, type);
+    if (days <= 0 || (type == 'Cuti Tahunan' && avail != null && avail - days < 0)) return;
     requests.add(HrRequest(
       id: _id(),
       kind: ReqKind.leave,
@@ -650,15 +748,19 @@ class HrStore extends ChangeNotifier {
     await _commit();
   }
 
-  Future<void> decide(String id, ReqStatus status) async {
-    if (!isAdmin) return;
+  /// Approve or reject. Returns null on success, or why it was refused.
+  Future<String?> decide(String id, ReqStatus status, {String note = ''}) async {
+    if (!isAdmin) return 'Hanya pengurus boleh membuat keputusan.';
     final r = requests.firstWhere((r) => r.id == id);
-    if (r.empId == me!.id) return; // no approving your own requests
+    if (r.empId == me!.id) return 'Permohonan anda sendiri perlu diputuskan oleh pengurus lain.';
+    if (r.status != ReqStatus.pending) return 'Permohonan ini sudah diputuskan.';
     r.status = status;
     r.decidedAt = now;
+    r.decisionNote = note.trim();
     _log(status == ReqStatus.approved ? 'Lulus ${r.kind.label.toLowerCase()}' : 'Tolak ${r.kind.label.toLowerCase()}',
-        '${nameOf(r.empId)} · ${_reqSummary(r)}');
+        '${nameOf(r.empId)} · ${_reqSummary(r)}${r.decisionNote.isNotEmpty ? ' · "${r.decisionNote}"' : ''}');
     await _commit();
+    return null;
   }
 
   /// Undo a decision made by mistake (the request goes back to pending).
@@ -667,6 +769,7 @@ class HrStore extends ChangeNotifier {
     final r = requests.firstWhere((r) => r.id == id);
     r.status = ReqStatus.pending;
     r.decidedAt = null;
+    r.decisionNote = '';
     _log('Batal keputusan ${r.kind.label.toLowerCase()}', '${nameOf(r.empId)} · ${_reqSummary(r)}');
     await _commit();
   }
@@ -697,6 +800,61 @@ class HrStore extends ChangeNotifier {
     await _commit();
   }
 
+  PayAdjustment adjustmentFor(String month, String empId) =>
+      adjustments['${month}_$empId'] ?? PayAdjustment();
+
+  Future<String?> setAdjustment(String month, String empId, PayAdjustment a) async {
+    if (!isAdmin) return 'Hanya pengurus boleh mengubah gaji.';
+    if (payrun(month) != null) return 'Gaji bulan ini sudah dimuktamadkan. Buka semula dahulu.';
+    for (final v in [a.bonus, a.commission, a.extraAllowance, a.otherDeduction]) {
+      if (v < 0 || v > 100000) return 'Nilai tidak sah.';
+    }
+    final key = '${month}_$empId';
+    if (a.isEmpty) {
+      adjustments.remove(key);
+    } else {
+      adjustments[key] = a;
+    }
+    _log('Pelarasan gaji', '${nameOf(empId)} · $month · bonus ${a.bonus.toStringAsFixed(2)}, '
+        'komisen ${a.commission.toStringAsFixed(2)}, elaun ${a.extraAllowance.toStringAsFixed(2)}, '
+        'potongan ${a.otherDeduction.toStringAsFixed(2)}');
+    await _commit();
+    return null;
+  }
+
+  /// Year-to-date totals per employee from finalised payroll, for Borang EA.
+  List<({Employee? emp, String name, String ic, double gross, double epf, double socso, double eis, double pcb, int months})>
+      yearTotals(int year) {
+    final acc = <String, Map<String, double>>{};
+    final names = <String, (String, String)>{};
+    for (final p in payruns.where((p) => p.month.startsWith('$year-'))) {
+      for (final l in p.lines) {
+        final m = acc.putIfAbsent(l.empId, () => {'gross': 0, 'epf': 0, 'socso': 0, 'eis': 0, 'pcb': 0, 'n': 0});
+        m['gross'] = m['gross']! + l.gross;
+        m['epf'] = m['epf']! + l.epfEe;
+        m['socso'] = m['socso']! + l.socsoEe;
+        m['eis'] = m['eis']! + l.eisEe;
+        m['pcb'] = m['pcb']! + l.pcb;
+        m['n'] = m['n']! + 1;
+        names[l.empId] = (l.name, l.ic);
+      }
+    }
+    return [
+      for (final e in acc.entries)
+        (
+          emp: employeeById(e.key),
+          name: names[e.key]!.$1,
+          ic: names[e.key]!.$2,
+          gross: round2(e.value['gross']!),
+          epf: round2(e.value['epf']!),
+          socso: round2(e.value['socso']!),
+          eis: round2(e.value['eis']!),
+          pcb: round2(e.value['pcb']!),
+          months: e.value['n']!.toInt(),
+        )
+    ]..sort((a, b) => a.name.compareTo(b.name));
+  }
+
   Future<void> reopenPayroll(String month) async {
     if (!isAdmin) return;
     payruns.removeWhere((p) => p.month == month);
@@ -709,17 +867,20 @@ class HrStore extends ChangeNotifier {
     final i = employees.indexWhere((x) => x.id == e.id);
     if (i >= 0) {
       final old = employees[i];
-      final changes = [
+      final changes = <String>[
         if (old.salary != e.salary) 'gaji ${old.salary.toStringAsFixed(2)} → ${e.salary.toStringAsFixed(2)}',
         if (old.allowance != e.allowance) 'elaun ${old.allowance.toStringAsFixed(2)} → ${e.allowance.toStringAsFixed(2)}',
         if (old.bankAcc != e.bankAcc) 'akaun bank ditukar',
         if (old.active != e.active) e.active ? 'diaktifkan semula' : 'ditanda berhenti',
       ];
+      if (old.isAdmin && !e.isAdmin && old.id == me!.id) e.isAdmin = true; // cannot demote yourself
+      if (old.isAdmin != e.isAdmin) changes.add(e.isAdmin ? 'dilantik pengurus' : 'akses pengurus ditarik');
       // Keep credentials and consent; the form never edits them.
       e
         ..pinHash = old.pinHash
         ..pinSalt = old.pinSalt
-        ..consentAt = old.consentAt;
+        ..consentAt = old.consentAt
+        ..photo = old.photo;
       employees[i] = e;
       _log('Kemas kini pekerja', [e.name, ...changes].join(' · '));
     } else {
@@ -749,6 +910,8 @@ class HrStore extends ChangeNotifier {
   Future<void> resetDemo() async {
     _seed();
     audit = [];
+    adjustments = {};
+    seenUpTo = {};
     failedPins = {};
     lockedUntil = {};
     currentUserId = null;
@@ -797,6 +960,8 @@ class HrStore extends ChangeNotifier {
         'audit': audit.map((a) => a.toJson()).toList(),
         'failedPins': failedPins,
         'lockedUntil': lockedUntil,
+        'seenUpTo': seenUpTo,
+        'adjustments': adjustments.map((k, v) => MapEntry(k, v.toJson())),
         'currentUserId': currentUserId,
       };
 
@@ -814,6 +979,9 @@ class HrStore extends ChangeNotifier {
     audit = list('audit').map(AuditEntry.fromJson).toList();
     failedPins = Map<String, int>.from(j['failedPins'] ?? {});
     lockedUntil = Map<String, String>.from(j['lockedUntil'] ?? {});
+    seenUpTo = Map<String, String>.from(j['seenUpTo'] ?? {});
+    adjustments = (j['adjustments'] as Map? ?? {})
+        .map((k, v) => MapEntry(k as String, PayAdjustment.fromJson(Map<String, dynamic>.from(v))));
     currentUserId = j['currentUserId'];
   }
 

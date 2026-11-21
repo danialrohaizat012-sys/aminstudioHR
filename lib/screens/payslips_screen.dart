@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../format.dart';
 import '../models.dart';
 import '../store.dart';
+import '../services/pdf_reports.dart';
 import '../widgets/common.dart';
 
 class PayslipsScreen extends StatelessWidget {
@@ -71,7 +72,9 @@ class PayslipDetail extends StatelessWidget {
     final store = StoreScope.of(context);
     final t = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
-    final l = line;
+    // A draft is recomputed on every build so adjustments show immediately.
+    final emp = store.employeeById(line.empId);
+    final l = draft && emp != null ? store.computeLine(emp, month) : line;
 
     Widget row(String k, double v, {bool bold = false, bool negative = false}) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 5),
@@ -83,7 +86,14 @@ class PayslipDetail extends StatelessWidget {
         );
 
     return Scaffold(
-      appBar: AppBar(title: Text('Slip ${monthLabel(month)}')),
+      appBar: AppBar(title: Text('Slip ${monthLabel(month)}'), actions: [
+        IconButton(
+          tooltip: 'Muat turun PDF',
+          icon: const Icon(Icons.picture_as_pdf_outlined),
+          onPressed: () async => sharePdf(await payslipPdf(store.settings.name, month, l),
+              'slip-gaji-${l.name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-')}-$month.pdf'),
+        ),
+      ]),
       body: PageList(children: [
         Card(
           child: Padding(
@@ -116,6 +126,9 @@ class PayslipDetail extends StatelessWidget {
           child: Column(children: [
             row('Gaji pokok', l.basic),
             if (l.allowance > 0) row('Elaun tetap', l.allowance),
+            if (l.extraAllowance > 0) row('Elaun tambahan', l.extraAllowance),
+            if (l.bonus > 0) row('Bonus', l.bonus),
+            if (l.commission > 0) row('Komisen', l.commission),
             if (l.overtime > 0) row('Kerja lebih masa', l.overtime),
             if (l.unpaidLeave > 0) row('Cuti tanpa gaji', l.unpaidLeave, negative: true),
             const Divider(height: 16),
@@ -129,11 +142,20 @@ class PayslipDetail extends StatelessWidget {
             row('PERKESO', l.socsoEe),
             row('SIP', l.eisEe),
             row('PCB / MTD', l.pcb),
+            if (l.otherDeduction > 0)
+              row('Potongan lain${l.adjustNote.isNotEmpty ? ' (${l.adjustNote})' : ''}', l.otherDeduction),
             const Divider(height: 16),
             row('Jumlah potongan', l.deductions, bold: true),
           ]),
         ),
         if (l.claims > 0) Section(title: 'Bayaran balik', child: row('Tuntutan diluluskan', l.claims)),
+        if (draft && store.isAdmin && emp != null)
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            onPressed: () => showAdjustmentForm(context, month, emp),
+            icon: const Icon(Icons.tune, size: 18),
+            label: const Text('Bonus, komisen dan potongan bulan ini'),
+          ),
         Section(
           title: 'Caruman majikan',
           child: Column(children: [
@@ -149,4 +171,81 @@ class PayslipDetail extends StatelessWidget {
       ]),
     );
   }
+}
+
+/// Manager enters one-off pay items for one employee in a draft month.
+Future<void> showAdjustmentForm(BuildContext context, String month, Employee e) {
+  final store = StoreScope.of(context);
+  final a = store.adjustmentFor(month, e.id);
+  String v(double x) => x == 0 ? '' : x.toStringAsFixed(2);
+  final c = {
+    'bonus': TextEditingController(text: v(a.bonus)),
+    'commission': TextEditingController(text: v(a.commission)),
+    'extra': TextEditingController(text: v(a.extraAllowance)),
+    'deduct': TextEditingController(text: v(a.otherDeduction)),
+    'note': TextEditingController(text: a.note),
+  };
+  String? error;
+  return showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (sheet) => StatefulBuilder(
+      builder: (sheet, set) {
+        Widget money(String k, String label, String? help) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: TextField(
+                controller: c[k],
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(labelText: label, prefixText: 'RM ', helperText: help),
+              ),
+            );
+        return Padding(
+          padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(sheet).viewInsets.bottom),
+          child: SingleChildScrollView(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text('Pelarasan ${monthLabel(month)}',
+                  style: Theme.of(sheet).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              Text(e.name, style: Theme.of(sheet).textTheme.bodyMedium),
+              const SizedBox(height: 16),
+              money('bonus', 'Bonus', 'Dikenakan KWSP, PERKESO, SIP dan PCB'),
+              money('commission', 'Komisen', null),
+              money('extra', 'Elaun tambahan', 'Contoh: elaun penggambaran luar'),
+              money('deduct', 'Potongan lain', 'Contoh: bayaran balik pendahuluan gaji'),
+              TextField(controller: c['note'], decoration: const InputDecoration(labelText: 'Catatan (dipapar pada slip)')),
+              if (error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(error!, style: TextStyle(color: Theme.of(sheet).colorScheme.error)),
+                ),
+              const SizedBox(height: 16),
+              FilledButton(
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
+                onPressed: () async {
+                  double n(String k) => double.tryParse(c[k]!.text.replaceAll(',', '').trim()) ?? 0;
+                  final err = await store.setAdjustment(
+                    month,
+                    e.id,
+                    PayAdjustment(
+                      bonus: n('bonus'),
+                      commission: n('commission'),
+                      extraAllowance: n('extra'),
+                      otherDeduction: n('deduct'),
+                      note: c['note']!.text.trim(),
+                    ),
+                  );
+                  if (err != null) {
+                    set(() => error = err);
+                    return;
+                  }
+                  if (sheet.mounted) Navigator.pop(sheet);
+                },
+                child: const Text('Simpan'),
+              ),
+            ]),
+          ),
+        );
+      },
+    ),
+  );
 }

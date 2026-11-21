@@ -106,7 +106,8 @@ class _LeaveFormState extends State<_LeaveForm> {
     final me = store.me!;
     final sameDay = ymd(from) == ymd(to);
     final days = store.leaveDays(ymd(from), ymd(to), sameDay ? half : null);
-    final bal = store.leaveBalance(me.id, type);
+    // Pending requests already hold days, so count them against the balance.
+    final bal = store.availableLeave(me.id, type);
     final after = bal == null ? null : bal - days;
     final overlap = store.requestsOf(me.id, ReqKind.leave).any((r) =>
         r.status != ReqStatus.rejected && r.from!.compareTo(ymd(to)) <= 0 && r.to!.compareTo(ymd(from)) >= 0);

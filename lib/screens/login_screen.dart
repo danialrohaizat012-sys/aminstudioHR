@@ -44,6 +44,19 @@ class LoginScreen extends StatelessWidget {
                 Center(
                   child: TextButton(
                     onPressed: () async {
+                      final ok = await showDialog<bool>(
+                        context: context,
+                        builder: (c) => AlertDialog(
+                          title: const Text('Set semula data demo?'),
+                          content: const Text(
+                              'Semua pekerja, kehadiran, permohonan, gaji dan PIN dalam peranti ini akan dipadam dan diganti dengan data contoh.'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Batal')),
+                            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Set semula')),
+                          ],
+                        ),
+                      );
+                      if (ok != true) return;
                       await store.resetDemo();
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(

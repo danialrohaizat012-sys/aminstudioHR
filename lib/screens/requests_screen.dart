@@ -90,6 +90,7 @@ class _RequestRow extends StatelessWidget {
         requestDetail(r),
         if (r.note.isNotEmpty) r.note,
         r.status == ReqStatus.pending ? 'dihantar ${ago(r.createdAt)}' : '${r.status.label.toLowerCase()} ${ago(r.decidedAt ?? r.createdAt)}',
+        if (r.decisionNote.isNotEmpty) 'Pengurus: “${r.decisionNote}”',
       ].join('\n'), style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
       isThreeLine: true,
       trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [

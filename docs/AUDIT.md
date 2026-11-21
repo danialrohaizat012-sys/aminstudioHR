@@ -76,3 +76,36 @@ Kebanyakan sumber ialah blog vendor; dakwaan produk tidak disahkan secara bebas.
 3. **Liveness selfie** dan semakan Wi-Fi kedai sebagai lapisan kedua anti-penipuan.
 4. **Eksport**: fail bank, CP39, Borang EA, laporan kehadiran bulanan (CSV/PDF).
 5. **Polisi pengekalan data** dan CSP.
+
+---
+
+# Audit ke-2: fungsi, aliran dan UI/UX (21 November 2026)
+
+## Pepijat aliran yang dibaiki
+
+| # | Penemuan | Kesan | Pembaikan |
+|---|---|---|---|
+| A1 | Pengurus menekan Lulus pada permohonan sendiri: sistem menolak secara senyap tetapi skrin tunjuk "diluluskan" | Mesej palsu, permohonan tersangkut | `decide()` pulangkan sebab; butang diganti mesej "Pengurus lain perlu membuat keputusan" |
+| A2 | Baki cuti tidak tolak cuti yang masih menunggu | Pekerja boleh mohon melebihi kelayakan | Baki dalam borang dan semakan store kira permohonan menunggu |
+| A3 | "Set semula data demo" memadam semua data tanpa pengesahan | Kehilangan data tidak sengaja | Dialog pengesahan |
+| A4 | Tiada cara menambah cuti umum, sedangkan kiraan cuti/kehadiran bergantung padanya | Hari cuti umum dikira hari bekerja / "tiada rekod" | Urus cuti umum (tarikh + nama) di Tetapan syarikat |
+| A5 | Tiada cara melantik pengurus kedua | Permohonan pengurus tidak boleh diluluskan sesiapa | Suis "Pengurus (akses HR)" dalam borang pekerja; tidak boleh tarik akses sendiri |
+| A6 | Penolakan tanpa sebab, pekerja tidak dimaklumkan | Pekerja keliru | Sebab wajib ditulis semasa tolak, dipapar kepada pekerja; lencana pada tab Mohon untuk keputusan baharu |
+| A7 | Pengumuman tidak boleh dipadam | Maklumat lapuk kekal | Padam dengan pengesahan, direkod dalam log audit |
+
+## Ciri tambahan
+
+- **Tempoh khidmat:** dalam senarai pekerja (susun paling lama/paling baru), purata dan paling lama, ulang tahun kerja seterusnya, dan amaran bila kelayakan cuti di bawah minimum Akta Kerja untuk tempoh khidmat tersebut (8/12/16 hari tahunan, 14/18/22 hari sakit).
+- **Gambar profil:** pekerja tukar sendiri (kamera/galeri); pengurus boleh tukar untuk sesiapa (direkod dalam log audit).
+- **Payroll:** bonus, komisen, elaun tambahan dan potongan lain bagi setiap bulan (draf sahaja, dikunci selepas dimuktamadkan); slip gaji PDF; PDF ringkasan gaji dengan senarai bayaran bank dan caruman berkanun; ringkasan tahunan per pekerja untuk Borang EA (skrin + PDF).
+- Getaran (haptic) bila punch berjaya.
+
+## Ujian
+
+38 ujian lulus (sebelum ini 29), termasuk penjanaan PDF dan semua pembaikan A1–A7.
+
+## Masih terbuka
+
+- Semua perkara R1–R5 dalam audit pertama (backend, liveness, CSP, pengekalan data).
+- PCB untuk bonus menggunakan kaedah bulanan ringkas; kaedah saraan tambahan LHDN memberi nilai berbeza.
+- Potongan gaji untuk hari tiada rekod tidak dibuat secara automatik (keputusan HR).

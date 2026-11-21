@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:material_ui/material_ui.dart';
 
 import '../format.dart';
@@ -240,6 +241,7 @@ class _PunchScreenState extends State<PunchScreen> {
       messenger.showSnackBar(SnackBar(content: Text(error)));
       return;
     }
+    HapticFeedback.mediumImpact();
     nav.pop(true);
     messenger.showSnackBar(SnackBar(
       content: Text(

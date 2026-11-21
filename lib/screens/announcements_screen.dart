@@ -12,8 +12,9 @@ List<Announcement> sortedAnnouncements(HrStore store) => [...store.announcements
   });
 
 class AnnouncementItem extends StatelessWidget {
-  const AnnouncementItem(this.a, {super.key});
+  const AnnouncementItem(this.a, {super.key, this.onDelete});
   final Announcement a;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +26,13 @@ class AnnouncementItem extends StatelessWidget {
         Row(children: [
           Expanded(child: Text(a.title, style: t.bodyLarge?.copyWith(fontWeight: FontWeight.w600))),
           if (a.pinned) Text('Disemat', style: t.labelSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w700)),
+          if (onDelete != null)
+            IconButton(
+              tooltip: 'Padam',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.delete_outline, size: 20),
+              onPressed: onDelete,
+            ),
         ]),
         const SizedBox(height: 2),
         Text(a.body, style: t.bodyMedium),
@@ -60,7 +68,25 @@ class AnnouncementsScreen extends StatelessWidget {
                 : Column(children: [
                     for (var i = 0; i < list.length; i++) ...[
                       if (i > 0) const Divider(),
-                      AnnouncementItem(list[i]),
+                      AnnouncementItem(
+                        list[i],
+                        onDelete: !store.isAdmin
+                            ? null
+                            : () async {
+                                final ok = await showDialog<bool>(
+                                  context: context,
+                                  builder: (c) => AlertDialog(
+                                    title: const Text('Padam pengumuman?'),
+                                    content: Text('“${list[i].title}” akan hilang untuk semua pekerja.'),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Batal')),
+                                      FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Padam')),
+                                    ],
+                                  ),
+                                );
+                                if (ok == true) await store.deleteAnnouncement(list[i].id);
+                              },
+                      ),
                     ],
                   ]),
           ),

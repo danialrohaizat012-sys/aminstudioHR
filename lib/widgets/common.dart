@@ -4,12 +4,18 @@ import 'package:material_ui/material_ui.dart';
 
 import '../format.dart';
 import '../models.dart';
+import '../services/punch_devices.dart';
 import '../store.dart';
 import '../theme.dart';
 
 /// A titled card. Most screens are a column of these.
 class Section extends StatelessWidget {
-  const Section({super.key, required this.title, this.action, required this.child, this.padding});
+  const Section(
+      {super.key,
+      required this.title,
+      this.action,
+      required this.child,
+      this.padding});
 
   final String title;
   final Widget? action;
@@ -26,7 +32,10 @@ class Section extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(children: [
-              Expanded(child: Text(title, style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+              Expanded(
+                  child: Text(title,
+                      style:
+                          t.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
               if (action != null) action!,
             ]),
             const SizedBox(height: 8),
@@ -79,9 +88,13 @@ class Tag extends StatelessWidget {
     final c = statusColors(context, tone);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-      decoration: BoxDecoration(color: c.bg, borderRadius: BorderRadius.circular(99)),
+      decoration:
+          BoxDecoration(color: c.bg, borderRadius: BorderRadius.circular(99)),
       child: Text(label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: c.fg, fontWeight: FontWeight.w700)),
+          style: Theme.of(context)
+              .textTheme
+              .labelSmall
+              ?.copyWith(color: c.fg, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -92,20 +105,30 @@ class Avatar extends StatelessWidget {
   final double radius;
 
   static const _shades = [
-    Color(0xFF141414), Color(0xFFC21F17), Color(0xFF3A3A3A), Color(0xFF8A5A00),
-    Color(0xFF5B5B5B), Color(0xFF9E2A1E),
+    Color(0xFF141414),
+    Color(0xFFC21F17),
+    Color(0xFF3A3A3A),
+    Color(0xFF8A5A00),
+    Color(0xFF5B5B5B),
+    Color(0xFF9E2A1E),
   ];
 
   @override
   Widget build(BuildContext context) {
     final e = employee;
+    if (e?.photo != null) {
+      return CircleAvatar(radius: radius, backgroundImage: MemoryImage(base64Decode(e!.photo!)));
+    }
     final color = _shades[(e?.id.hashCode ?? 0).abs() % _shades.length];
     return CircleAvatar(
       radius: radius,
       backgroundColor: color,
       child: Text(
         e?.initials ?? '?',
-        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: radius * .72),
+        style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize: radius * .72),
       ),
     );
   }
@@ -146,7 +169,13 @@ class FigureStrip extends StatelessWidget {
 }
 
 class Figure extends StatelessWidget {
-  const Figure({super.key, required this.label, required this.value, this.note, this.onTap, this.progress});
+  const Figure(
+      {super.key,
+      required this.label,
+      required this.value,
+      this.note,
+      this.onTap,
+      this.progress});
   final String label, value;
   final String? note;
   final VoidCallback? onTap;
@@ -163,17 +192,23 @@ class Figure extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
           const SizedBox(height: 2),
-          Text(value, style: t.titleLarge?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -.3)),
+          Text(value,
+              style: t.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -.3)),
           if (progress != null) ...[
             const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(99),
-              child: LinearProgressIndicator(value: progress, minHeight: 5, backgroundColor: cs.surfaceContainer),
+              child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 5,
+                  backgroundColor: cs.surfaceContainer),
             ),
           ],
           if (note != null) ...[
             const SizedBox(height: 4),
-            Text(note!, style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+            Text(note!,
+                style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
           ],
         ]),
       ),
@@ -189,7 +224,8 @@ class QuietText extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Text(text,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
       );
 }
 
@@ -198,11 +234,14 @@ String requestTitle(HrRequest r) => switch (r.kind) {
       ReqKind.leave =>
         '${r.leaveType}${r.halfDay == null ? '' : r.halfDay == 'am' ? ' (pagi)' : ' (petang)'} · ${daysLabel(r.days)}',
       ReqKind.claim => 'Tuntutan ${rm(r.amount)}',
-      ReqKind.overtime => 'Lebih masa ${r.hours.toStringAsFixed(r.hours % 1 == 0 ? 0 : 1)} jam',
+      ReqKind.overtime =>
+        'Lebih masa ${r.hours.toStringAsFixed(r.hours % 1 == 0 ? 0 : 1)} jam',
     };
 
 String requestDetail(HrRequest r) => switch (r.kind) {
-      ReqKind.leave => r.from == r.to ? fmtDate(r.from) : '${fmtShort(r.from)} – ${fmtDate(r.to)}',
+      ReqKind.leave => r.from == r.to
+          ? fmtDate(r.from)
+          : '${fmtShort(r.from)} – ${fmtDate(r.to)}',
       ReqKind.claim => '${r.category} · ${fmtDate(r.date)}',
       ReqKind.overtime => '${fmtDate(r.date)} · ${r.rate}×',
     };
@@ -251,12 +290,16 @@ class ApprovalTile extends StatelessWidget {
           Avatar(e),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(store.nameOf(r.empId), style: t.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(store.nameOf(r.empId),
+                  style: t.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
               Text(requestTitle(r), style: t.bodyMedium),
-              Text(requestDetail(r), style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              Text(requestDetail(r),
+                  style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
               if (r.note.isNotEmpty)
-                Text('“${r.note}”', style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                Text('“${r.note}”',
+                    style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
               if (receipt != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
@@ -265,48 +308,65 @@ class ApprovalTile extends StatelessWidget {
                       context: context,
                       builder: (c) => Dialog(
                         clipBehavior: Clip.antiAlias,
-                        child: InteractiveViewer(child: Image.memory(base64Decode(receipt!))),
+                        child: InteractiveViewer(
+                            child: Image.memory(base64Decode(receipt!))),
                       ),
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.memory(base64Decode(receipt), width: 44, height: 44, fit: BoxFit.cover),
+                        child: Image.memory(base64Decode(receipt),
+                            width: 44, height: 44, fit: BoxFit.cover),
                       ),
                       const SizedBox(width: 8),
-                      Text('Lihat resit', style: t.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+                      Text('Lihat resit',
+                          style: t.bodySmall
+                              ?.copyWith(fontWeight: FontWeight.w600)),
                     ]),
                   ),
                 ),
               if (balanceNote != null)
                 Text(balanceNote,
                     style: t.bodySmall?.copyWith(
-                        color: overdraw ? statusColors(context, 'bad').fg : cs.onSurfaceVariant,
+                        color: overdraw
+                            ? statusColors(context, 'bad').fg
+                            : cs.onSurfaceVariant,
                         fontWeight: overdraw ? FontWeight.w700 : null)),
             ]),
           ),
-          Text(ago(r.createdAt), style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          Text(ago(r.createdAt),
+              style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
         ]),
         const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.only(left: 48),
-          child: Row(children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => _decide(context, ReqStatus.rejected),
-                style: OutlinedButton.styleFrom(foregroundColor: statusColors(context, 'bad').fg),
-                child: const Text('Tolak'),
+        if (r.empId == store.me?.id)
+          Padding(
+            padding: const EdgeInsets.only(left: 48),
+            child: Text(
+                'Permohonan anda sendiri. Pengurus lain perlu membuat keputusan.',
+                style: t.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant, fontStyle: FontStyle.italic)),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.only(left: 48),
+            child: Row(children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => _decide(context, ReqStatus.rejected),
+                  style: OutlinedButton.styleFrom(
+                      foregroundColor: statusColors(context, 'bad').fg),
+                  child: const Text('Tolak'),
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: FilledButton(
-                onPressed: () => _decide(context, ReqStatus.approved),
-                child: const Text('Lulus'),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => _decide(context, ReqStatus.approved),
+                  child: const Text('Lulus'),
+                ),
               ),
-            ),
-          ]),
-        ),
+            ]),
+          ),
       ]),
     );
   }
@@ -315,10 +375,46 @@ class ApprovalTile extends StatelessWidget {
     final store = StoreScope.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final name = store.nameOf(r.empId);
-    await store.decide(r.id, s);
+    var note = '';
+    if (s == ReqStatus.rejected) {
+      final ctl = TextEditingController();
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text('Tolak ${r.kind.label.toLowerCase()} $name?'),
+          content: TextField(
+            controller: ctl,
+            autofocus: true,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Sebab (pekerja akan nampak)',
+              hintText: 'Contoh: kedai kekurangan staf pada tarikh ini',
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(c, false),
+                child: const Text('Batal')),
+            FilledButton(
+                onPressed: () => Navigator.pop(c, true),
+                child: const Text('Tolak')),
+          ],
+        ),
+      );
+      note = ctl.text;
+      ctl.dispose();
+      if (ok != true) return;
+    }
+    final err = await store.decide(r.id, s, note: note);
+    if (err != null) {
+      messenger.showSnackBar(SnackBar(content: Text(err)));
+      return;
+    }
     messenger.showSnackBar(SnackBar(
-      content: Text('${r.kind.label} $name ${s == ReqStatus.approved ? 'diluluskan' : 'ditolak'}'),
-      action: SnackBarAction(label: 'Batal', onPressed: () => store.undoDecision(r.id)),
+      content: Text(
+          '${r.kind.label} $name ${s == ReqStatus.approved ? 'diluluskan' : 'ditolak'}'),
+      action: SnackBarAction(
+          label: 'Batal', onPressed: () => store.undoDecision(r.id)),
     ));
   }
 }
@@ -335,7 +431,8 @@ class ColumnBreak extends StatelessWidget {
 /// [maxWidth] so it does not stretch across a desktop monitor; pages that
 /// include a [ColumnBreak] become two columns from 1000 px.
 class PageList extends StatelessWidget {
-  const PageList({super.key, required this.children, this.onRefresh, this.maxWidth = 760});
+  const PageList(
+      {super.key, required this.children, this.onRefresh, this.maxWidth = 760});
   final List<Widget> children;
   final Future<void> Function()? onRefresh;
   final double maxWidth;
@@ -349,13 +446,17 @@ class PageList extends StatelessWidget {
       final twoCol = breakAt >= 0 && box.maxWidth >= 1000;
       final cap = twoCol ? 1180.0 : maxWidth;
       final side = ((box.maxWidth - cap) / 2).clamp(16.0, double.infinity);
-      final padding = EdgeInsets.fromLTRB(side, box.maxWidth >= 840 ? 16 : 8, side, 96);
+      final padding =
+          EdgeInsets.fromLTRB(side, box.maxWidth >= 840 ? 16 : 8, side, 96);
       final items = children.where((w) => w is! ColumnBreak).toList();
 
       Widget column(List<Widget> ws) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              for (var i = 0; i < ws.length; i++) ...[if (i > 0) const SizedBox(height: gap), ws[i]],
+              for (var i = 0; i < ws.length; i++) ...[
+                if (i > 0) const SizedBox(height: gap),
+                ws[i]
+              ],
             ],
           );
 
@@ -373,7 +474,63 @@ class PageList extends StatelessWidget {
               separatorBuilder: (_, __) => const SizedBox(height: gap),
               itemBuilder: (_, i) => items[i],
             );
-      return onRefresh == null ? list : RefreshIndicator(onRefresh: onRefresh!, child: list);
+      return onRefresh == null
+          ? list
+          : RefreshIndicator(onRefresh: onRefresh!, child: list);
     });
+  }
+}
+
+/// Avatar with a camera badge; tapping offers camera, gallery or removal.
+class EditableAvatar extends StatelessWidget {
+  const EditableAvatar({super.key, required this.employee, this.radius = 30});
+  final Employee employee;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      customBorder: const CircleBorder(),
+      onTap: () => _pick(context),
+      child: Stack(clipBehavior: Clip.none, children: [
+        Avatar(employee, radius: radius),
+        Positioned(
+          right: -2,
+          bottom: -2,
+          child: Container(
+            padding: const EdgeInsets.all(5),
+            decoration: BoxDecoration(color: cs.primary, shape: BoxShape.circle, border: Border.all(color: cs.surface, width: 2)),
+            child: Icon(Icons.photo_camera, size: radius * .38, color: cs.onPrimary),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Future<void> _pick(BuildContext context) async {
+    final store = StoreScope.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(leading: const Icon(Icons.photo_camera_outlined), title: const Text('Ambil gambar'), onTap: () => Navigator.pop(c, 'camera')),
+          ListTile(leading: const Icon(Icons.photo_library_outlined), title: const Text('Pilih dari galeri'), onTap: () => Navigator.pop(c, 'gallery')),
+          if (employee.photo != null)
+            ListTile(leading: const Icon(Icons.delete_outline), title: const Text('Buang gambar'), onTap: () => Navigator.pop(c, 'remove')),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+    if (choice == null) return;
+    if (choice == 'remove') {
+      await store.setProfilePhoto(employee.id, null);
+      return;
+    }
+    final p = await punchDevices.profilePhoto(camera: choice == 'camera');
+    if (p == null) return;
+    await store.setProfilePhoto(employee.id, p);
+    messenger.showSnackBar(const SnackBar(content: Text('Gambar profil dikemas kini')));
   }
 }

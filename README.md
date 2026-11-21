@@ -7,7 +7,7 @@ Aplikasi mudah alih HR untuk SME Malaysia: kehadiran, cuti, tuntutan, lebih masa
 ```bash
 flutter pub get
 flutter run            # pilih telefon, emulator atau Chrome
-flutter test           # 29 ujian: caruman, cuti, kelulusan, gaji, punch, PIN, peranan, audit, peringatan
+flutter test           # 38 ujian: caruman, cuti, kelulusan, gaji, punch, PIN, peranan, audit, peringatan
 ```
 
 ![Paparan pekerja](docs/screenshots/pekerja.png)
@@ -23,6 +23,12 @@ Skrin log masuk menyenaraikan akaun contoh:
 - **Aisyah, Arun, Hafiz, Mei Ling** (pekerja) nampak punch masuk, baki cuti, permohonan dan slip gaji.
 
 Data disimpan dalam peranti (`shared_preferences`). "Set semula data demo" di skrin log masuk memulihkan data contoh.
+
+## Payroll
+
+- Kiraan bulanan: gaji pokok, elaun, OT, bonus, komisen, elaun tambahan, potongan lain, cuti tanpa gaji, tuntutan; KWSP, PERKESO, SIP, PCB (anggaran).
+- Draf boleh dilaras, kemudian dimuktamadkan untuk keluarkan slip kepada pekerja.
+- PDF: slip gaji, ringkasan gaji + senarai bayaran bank + caruman, ringkasan tahunan untuk Borang EA.
 
 ## Keselamatan
 

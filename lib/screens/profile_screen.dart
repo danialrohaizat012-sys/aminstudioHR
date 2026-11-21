@@ -27,7 +27,7 @@ class ProfileScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Profil')),
       body: PageList(children: [
         Row(children: [
-          Avatar(me, radius: 30),
+          EditableAvatar(employee: me, radius: 34),
           const SizedBox(width: 14),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -239,6 +239,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ]),
         ),
+        heading('Cuti umum'),
+        const _Holidays(),
         heading('Punch masuk'),
         Card(
           clipBehavior: Clip.antiAlias,
@@ -265,6 +267,79 @@ class _SettingsScreenState extends State<SettingsScreen> {
             nav.pop();
           },
           child: const Text('Simpan'),
+        ),
+      ]),
+    );
+  }
+}
+
+/// Public holidays: not counted as working days for leave or attendance.
+class _Holidays extends StatelessWidget {
+  const _Holidays();
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final s = store.settings;
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final yr = '${store.now.year}';
+    final list = s.holidays.where((d) => d.compareTo('$yr-01-01') >= 0).toList();
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (list.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+            child: Text('Belum ada cuti umum. Tambah cuti kebangsaan dan cuti negeri Kelantan supaya kiraan cuti dan kehadiran tepat.',
+                style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          ),
+        for (final d in list)
+          ListTile(
+            dense: true,
+            title: Text(s.holidayNames[d] ?? 'Cuti umum'),
+            subtitle: Text(longDate(parseYmd(d))),
+            trailing: IconButton(
+              tooltip: 'Buang',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () => store.removeHoliday(d),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: OutlinedButton.icon(
+            onPressed: () async {
+              final d = await showDatePicker(
+                context: context,
+                initialDate: store.now,
+                firstDate: DateTime(store.now.year - 1),
+                lastDate: DateTime(store.now.year + 2, 12, 31),
+                helpText: 'Tarikh cuti umum',
+              );
+              if (d == null || !context.mounted) return;
+              final ctl = TextEditingController();
+              final name = await showDialog<String>(
+                context: context,
+                builder: (c) => AlertDialog(
+                  title: Text(longDate(d)),
+                  content: TextField(
+                    controller: ctl,
+                    autofocus: true,
+                    decoration: const InputDecoration(labelText: 'Nama cuti', hintText: 'Contoh: Hari Keputeraan Sultan Kelantan'),
+                  ),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(c), child: const Text('Batal')),
+                    FilledButton(onPressed: () => Navigator.pop(c, ctl.text.trim()), child: const Text('Tambah')),
+                  ],
+                ),
+              );
+              ctl.dispose();
+              if (name == null) return;
+              await store.addHoliday(ymd(d), name.isEmpty ? 'Cuti umum' : name);
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Tambah cuti umum'),
+          ),
         ),
       ]),
     );

@@ -252,4 +252,98 @@ void main() {
       expect(sum.absentDays, isNot(contains('2026-11-06'))); // Friday is a closed day
     });
   });
+
+  group('audit round 2', () {
+    test('approving your own request reports an error instead of success', () async {
+      final s = make();
+      await s.signInForTest('admin');
+      await s.submitClaim(category: 'Makan', date: '2026-11-17', amount: 20);
+      final id = s.requestsOf('admin').first.id;
+      expect(await s.decide(id, ReqStatus.approved), contains('pengurus lain'));
+    });
+
+    test('reject reason is kept and shown to the employee as a new decision', () async {
+      final s = make();
+      await s.signInForTest('admin');
+      final r = s.pending(ReqKind.leave).firstWhere((r) => r.empId == 'e2');
+      expect(await s.decide(r.id, ReqStatus.rejected, note: 'Kedai sibuk'), isNull);
+      expect(r.decisionNote, 'Kedai sibuk');
+      await s.signInForTest('e2');
+      expect(s.unseenDecisions().map((x) => x.id), contains(r.id));
+      await s.markDecisionsSeen();
+      expect(s.unseenDecisions(), isEmpty);
+    });
+
+    test('pending leave counts against the balance', () async {
+      final s = make();
+      await s.signInForTest('e2');
+      final before = s.availableLeave('e2', 'Cuti Tahunan')!;
+      expect(before, lessThan(s.leaveBalance('e2', 'Cuti Tahunan')!)); // seed has a pending request
+      // Asking for more than what is left is refused by the store.
+      final n = s.requests.length;
+      await s.submitLeave(type: 'Cuti Tahunan', from: '2026-11-21', to: '2026-12-31');
+      expect(s.requests.length, n);
+    });
+
+    test('public holidays are not working days', () async {
+      final s = make();
+      await s.signInForTest('admin');
+      expect(s.workdays('2026-11-19', '2026-11-19'), 1);
+      await s.addHoliday('2026-11-19', 'Cuti contoh');
+      expect(s.workdays('2026-11-19', '2026-11-19'), 0);
+      expect(s.settings.holidayNames['2026-11-19'], 'Cuti contoh');
+      await s.removeHoliday('2026-11-19');
+      expect(s.workdays('2026-11-19', '2026-11-19'), 1);
+    });
+
+    test('a manager can appoint another manager but cannot demote themself', () async {
+      final s = make();
+      await s.signInForTest('admin');
+      Employee copy(Employee e, bool admin) =>
+          Employee(id: e.id, name: e.name, joinDate: e.joinDate, salary: e.salary, isAdmin: admin);
+      await s.saveEmployee(copy(s.employeeById('e1')!, true));
+      expect(s.employeeById('e1')!.isAdmin, isTrue);
+      await s.saveEmployee(copy(s.employeeById('admin')!, false));
+      expect(s.employeeById('admin')!.isAdmin, isTrue);
+    });
+
+    test('profile photos: yourself, or anyone as a manager', () async {
+      final s = make();
+      await s.signInForTest('e2');
+      await s.setProfilePhoto('e3', 'eA==');
+      expect(s.employeeById('e3')!.photo, isNull);
+      await s.setProfilePhoto('e2', 'eA==');
+      expect(s.employeeById('e2')!.photo, 'eA==');
+      await s.signInForTest('admin');
+      await s.setProfilePhoto('e3', 'eQ==');
+      expect(s.employeeById('e3')!.photo, 'eQ==');
+    });
+
+    test('bonus and deductions flow into the payslip and lock after finalising', () async {
+      final s = make();
+      await s.signInForTest('admin');
+      final e = s.employeeById('e2')!;
+      final base = s.computeLine(e, '2026-11');
+      expect(await s.setAdjustment('2026-11', 'e2', PayAdjustment(bonus: 500, otherDeduction: 100, note: 'Pendahuluan')), isNull);
+      final l = s.computeLine(e, '2026-11');
+      expect(l.gross, base.gross + 500);
+      expect(l.epfEe, greaterThan(base.epfEe));
+      expect(l.net, closeTo(l.gross - l.epfEe - l.socsoEe - l.eisEe - l.pcb - 100 + l.claims, .01));
+      await s.finalizePayroll('2026-11');
+      expect(await s.setAdjustment('2026-11', 'e2', PayAdjustment(bonus: 1)), contains('dimuktamadkan'));
+      final year = s.yearTotals(2026);
+      expect(year.firstWhere((r) => r.name == e.name).gross, closeTo(l.gross + base.gross, 1)); // Oct + Nov
+    });
+
+    test('length of service and statutory leave minimums', () {
+      final s = make();
+      final e = s.employeeById('e1')!; // joined 1 Mar 2019
+      expect(HrStore.serviceYears(e, s.now), 7);
+      expect(HrStore.statutoryLeave(e, s.now).annual, 16);
+      final e3 = s.employeeById('e3')!; // joined Feb 2025, 8 days annual
+      expect(HrStore.statutoryLeave(e3, s.now).annual, 8);
+      e.leaveAnnual = 12;
+      expect(s.belowStatutoryLeave(), contains(e));
+    });
+  });
 }

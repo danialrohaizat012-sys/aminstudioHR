@@ -2,7 +2,9 @@ import 'package:material_ui/material_ui.dart';
 
 import '../format.dart';
 import '../store.dart';
+import '../services/pdf_reports.dart';
 import '../widgets/common.dart';
+import 'year_summary_screen.dart';
 import 'payslips_screen.dart';
 
 class PayrollScreen extends StatefulWidget {
@@ -24,7 +26,21 @@ class _PayrollScreenState extends State<PayrollScreen> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Penggajian')),
+      appBar: AppBar(title: const Text('Penggajian'), actions: [
+        IconButton(
+          tooltip: 'Ringkasan tahunan (Borang EA)',
+          icon: const Icon(Icons.summarize_outlined),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const YearSummaryScreen())),
+        ),
+        IconButton(
+          tooltip: 'PDF ringkasan gaji dan bayaran bank',
+          icon: const Icon(Icons.picture_as_pdf_outlined),
+          onPressed: lines.isEmpty
+              ? null
+              : () async => sharePdf(
+                  await payrollPdf(store.settings.name, month, lines, finalised: run != null), 'gaji-$month.pdf'),
+        ),
+      ]),
       body: PageList(children: [
         Row(children: [
           IconButton(onPressed: () => setState(() => month = addMonths(month, -1)), icon: const Icon(Icons.chevron_left)),
@@ -54,7 +70,10 @@ class _PayrollScreenState extends State<PayrollScreen> {
                       leading: Avatar(store.employeeById(lines[i].empId)),
                       title: Text(lines[i].name, style: const TextStyle(fontWeight: FontWeight.w600)),
                       subtitle: Text(
-                        'Kasar ${rm(lines[i].gross)}${lines[i].overtime > 0 ? ' · OT ${rm(lines[i].overtime)}' : ''}${lines[i].claims > 0 ? ' · tuntutan ${rm(lines[i].claims)}' : ''}',
+                        'Kasar ${rm(lines[i].gross)}${lines[i].overtime > 0 ? ' · OT ${rm(lines[i].overtime)}' : ''}'
+                        '${lines[i].bonus + lines[i].commission > 0 ? ' · bonus/komisen ${rm(lines[i].bonus + lines[i].commission)}' : ''}'
+                        '${lines[i].otherDeduction > 0 ? ' · potongan ${rm(lines[i].otherDeduction)}' : ''}'
+                        '${lines[i].claims > 0 ? ' · tuntutan ${rm(lines[i].claims)}' : ''}',
                         style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                       ),
                       trailing: Text(rm(lines[i].net), style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700)),

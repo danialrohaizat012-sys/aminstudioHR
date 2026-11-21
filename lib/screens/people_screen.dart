@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../format.dart';
 import '../models.dart';
 import '../store.dart';
+import '../theme.dart';
 import '../widgets/common.dart';
 
 class PeopleScreen extends StatefulWidget {
@@ -11,8 +12,11 @@ class PeopleScreen extends StatefulWidget {
   State<PeopleScreen> createState() => _PeopleScreenState();
 }
 
+enum _Sort { name, longest, newest }
+
 class _PeopleScreenState extends State<PeopleScreen> {
   String q = '';
+  _Sort sort = _Sort.name;
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +25,20 @@ class _PeopleScreenState extends State<PeopleScreen> {
     final list = store.employees
         .where((e) => ql.isEmpty || '${e.name} ${e.dept} ${e.position}'.toLowerCase().contains(ql))
         .toList()
-      ..sort((a, b) => a.active == b.active ? a.name.compareTo(b.name) : (a.active ? -1 : 1));
+      ..sort((a, b) {
+        if (a.active != b.active) return a.active ? -1 : 1;
+        return switch (sort) {
+          _Sort.name => a.name.compareTo(b.name),
+          _Sort.longest => a.joinDate.compareTo(b.joinDate),
+          _Sort.newest => b.joinDate.compareTo(a.joinDate),
+        };
+      });
+    final active = store.activeEmployees;
+    final avgDays = active.isEmpty
+        ? 0
+        : active.fold(0, (s, e) => s + store.now.difference(e.joinDate).inDays) ~/ active.length;
+    final longest = active.isEmpty ? null : (active.toList()..sort((a, b) => a.joinDate.compareTo(b.joinDate))).first;
+    final under = store.belowStatutoryLeave();
     final t = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
 
@@ -41,6 +58,39 @@ class _PeopleScreenState extends State<PeopleScreen> {
           side: WidgetStatePropertyAll(BorderSide(color: cs.outlineVariant)),
           onChanged: (v) => setState(() => q = v),
         ),
+        FigureStrip(items: [
+          Figure(label: 'Purata khidmat', value: tenure(store.now.subtract(Duration(days: avgDays)))),
+          Figure(
+            label: 'Paling lama',
+            value: longest == null ? '—' : tenure(longest.joinDate),
+            note: longest?.name,
+          ),
+        ]),
+        if (under.isNotEmpty)
+          Card(
+            color: statusColors(context, 'warn').bg,
+            child: ListTile(
+              leading: Icon(Icons.gavel_outlined, color: statusColors(context, 'warn').fg),
+              title: const Text('Kelayakan cuti bawah minimum Akta Kerja'),
+              subtitle: Text('${under.map((e) => e.firstName).join(', ')}. '
+                  'Minimum naik ikut tempoh khidmat: 8/12/16 hari cuti tahunan.'),
+            ),
+          ),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (final (v, l) in const [(_Sort.name, 'Nama'), (_Sort.longest, 'Paling lama'), (_Sort.newest, 'Paling baru')])
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text(l),
+                  selected: sort == v,
+                  showCheckmark: false,
+                  onSelected: (_) => setState(() => sort = v),
+                ),
+              ),
+          ]),
+        ),
         Card(
           clipBehavior: Clip.antiAlias,
           child: list.isEmpty
@@ -51,7 +101,10 @@ class _PeopleScreenState extends State<PeopleScreen> {
                     ListTile(
                       leading: Avatar(list[i]),
                       title: Text(list[i].name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text('${list[i].position} · ${list[i].dept}', style: t.bodySmall),
+                      subtitle: Text(
+                          '${list[i].position} · ${list[i].dept}\nBerkhidmat ${tenure(list[i].joinDate)} · sejak ${fmtDate(ymd(list[i].joinDate))}',
+                          style: t.bodySmall),
+                      isThreeLine: true,
                       trailing: list[i].active
                           ? (list[i].isAdmin ? const Tag('Admin', tone: 'mute') : const Icon(Icons.chevron_right))
                           : const Tag('Berhenti', tone: 'bad'),
@@ -100,7 +153,7 @@ class EmployeeDetail extends StatelessWidget {
       ]),
       body: PageList(children: [
         Row(children: [
-          Avatar(e, radius: 30),
+          EditableAvatar(employee: e, radius: 34),
           const SizedBox(width: 14),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -110,11 +163,39 @@ class EmployeeDetail extends StatelessWidget {
           ),
         ]),
         FigureStrip(items: [
+          Figure(
+            label: 'Tempoh khidmat',
+            value: tenure(e.joinDate),
+            note: 'sejak ${fmtDate(ymd(e.joinDate))}',
+          ),
+          Figure(
+            label: 'Ulang tahun kerja',
+            value: () {
+              final y = HrStore.serviceYears(e, store.now) + 1;
+              var next = DateTime(e.joinDate.year + y, e.joinDate.month, e.joinDate.day);
+              final d = next.difference(DateTime(store.now.year, store.now.month, store.now.day)).inDays;
+              return d == 0 ? 'Hari ini' : '$d hari lagi';
+            }(),
+            note: 'genap ${HrStore.serviceYears(e, store.now) + 1} tahun',
+          ),
           Figure(label: 'Cuti tahunan', value: daysLabel(store.leaveBalance(empId, 'Cuti Tahunan') ?? 0), note: 'daripada ${e.leaveAnnual}'),
           Figure(label: 'Cuti sakit', value: daysLabel(store.leaveBalance(empId, 'Cuti Sakit') ?? 0), note: 'daripada ${e.leaveMedical}'),
           Figure(label: 'Hadir ${monthsMs[store.now.month - 1].substring(0, 3)}', value: '${att.length} hari'),
           Figure(label: 'Lewat', value: '${att.where(store.isLate).length}', note: 'bulan ini'),
         ]),
+        if (store.belowStatutoryLeave().contains(e))
+          Card(
+            color: statusColors(context, 'warn').bg,
+            child: ListTile(
+              leading: Icon(Icons.gavel_outlined, color: statusColors(context, 'warn').fg),
+              title: const Text('Kelayakan cuti bawah minimum'),
+              subtitle: Text(() {
+                final m = HrStore.statutoryLeave(e, store.now);
+                return 'Untuk ${HrStore.serviceYears(e, store.now)} tahun khidmat, Akta Kerja menetapkan sekurang-kurangnya '
+                    '${m.annual} hari cuti tahunan dan ${m.sick} hari cuti sakit. Sekarang: ${e.leaveAnnual} dan ${e.leaveMedical}.';
+              }()),
+            ),
+          ),
         Section(
           title: 'Maklumat',
           child: Column(children: [
@@ -203,6 +284,7 @@ class _EmployeeFormState extends State<EmployeeForm> {
   late DateTime join;
   late bool active;
   String? probation, contract;
+  late bool manager;
 
   @override
   void initState() {
@@ -227,6 +309,7 @@ class _EmployeeFormState extends State<EmployeeForm> {
     probation = e?.probationEnd ??
         (e == null ? ymd(DateTime(join.year, join.month + 3, join.day)) : null); // 3-month default
     contract = e?.contractEnd;
+    manager = e?.isAdmin ?? false;
   }
 
   @override
@@ -319,6 +402,15 @@ class _EmployeeFormState extends State<EmployeeForm> {
           field('phone', 'Telefon', type: TextInputType.phone),
           field('bank', 'Bank'),
           field('bankAcc', 'No. akaun bank'),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: manager,
+            onChanged: widget.existing?.id == store.me!.id ? null : (v) => setState(() => manager = v),
+            title: const Text('Pengurus (akses HR)'),
+            subtitle: Text(widget.existing?.id == store.me!.id
+                ? 'Anda tidak boleh menarik akses pengurus anda sendiri'
+                : 'Boleh lulus permohonan, lihat gaji dan ubah tetapan'),
+          ),
           if (editing)
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -348,7 +440,7 @@ class _EmployeeFormState extends State<EmployeeForm> {
                 allowance: double.tryParse(c['allowance']!.text) ?? 0,
                 leaveAnnual: int.tryParse(c['leaveAnnual']!.text) ?? 8,
                 leaveMedical: int.tryParse(c['leaveMedical']!.text) ?? 14,
-                isAdmin: old?.isAdmin ?? false,
+                isAdmin: manager,
                 active: active,
                 probationEnd: probation,
                 contractEnd: contract,
