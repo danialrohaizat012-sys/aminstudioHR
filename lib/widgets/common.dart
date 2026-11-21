@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../format.dart';
@@ -216,6 +217,48 @@ class Figure extends StatelessWidget {
   }
 }
 
+/// Snackbar with a Batal button, used after quick actions instead of an
+/// "are you sure" dialog.
+void showUndo(BuildContext context, String message, Future<void> Function() undo) {
+  final m = ScaffoldMessenger.of(context);
+  m.hideCurrentSnackBar();
+  m.showSnackBar(SnackBar(content: Text(message), action: SnackBarAction(label: 'Batal', onPressed: () => undo())));
+}
+
+/// Friendly empty state: icon, one line, and the next thing to do.
+class EmptyState extends StatelessWidget {
+  const EmptyState({super.key, required this.icon, required this.title, this.message, this.action});
+  final IconData icon;
+  final String title;
+  final String? message;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
+      child: Column(children: [
+        Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(color: cs.surfaceContainerHighest, shape: BoxShape.circle),
+          child: Icon(icon, color: cs.onSurfaceVariant),
+        ),
+        const SizedBox(height: 12),
+        Text(title, textAlign: TextAlign.center, style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+        if (message != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(message!, textAlign: TextAlign.center, style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          ),
+        if (action != null) Padding(padding: const EdgeInsets.only(top: 12), child: action!),
+      ]),
+    );
+  }
+}
+
 class QuietText extends StatelessWidget {
   const QuietText(this.text, {super.key});
   final String text;
@@ -255,12 +298,40 @@ IconData requestIcon(ReqKind k) => switch (k) {
 /// Pending request row with approve / reject, used on the manager home and
 /// in the approvals inbox.
 class ApprovalTile extends StatelessWidget {
-  const ApprovalTile(this.r, {super.key, this.showBalance = false});
+  const ApprovalTile(this.r, {super.key, this.showBalance = false, this.swipe = false});
   final HrRequest r;
   final bool showBalance;
 
+  /// Swipe right to approve, left to reject (with a reason).
+  final bool swipe;
+
   @override
   Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final tile = _tile(context);
+    if (!swipe || r.empId == store.me?.id) return tile;
+    Widget bg(Alignment a, Color bg, Color fg, IconData icon, String label) => Container(
+          alignment: a,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, color: fg),
+            const SizedBox(width: 8),
+            Text(label, style: TextStyle(color: fg, fontWeight: FontWeight.w700)),
+          ]),
+        );
+    final ok = statusColors(context, 'ok'), bad = statusColors(context, 'bad');
+    return Dismissible(
+      key: ValueKey('swipe_${r.id}'),
+      background: bg(Alignment.centerLeft, ok.bg, ok.fg, Icons.check, 'Lulus'),
+      secondaryBackground: bg(Alignment.centerRight, bad.bg, bad.fg, Icons.close, 'Tolak'),
+      confirmDismiss: (dir) =>
+          _decide(context, dir == DismissDirection.startToEnd ? ReqStatus.approved : ReqStatus.rejected),
+      child: tile,
+    );
+  }
+
+  Widget _tile(BuildContext context) {
     final store = StoreScope.of(context);
     final e = store.employeeById(r.empId);
     final t = Theme.of(context).textTheme;
@@ -371,7 +442,7 @@ class ApprovalTile extends StatelessWidget {
     );
   }
 
-  Future<void> _decide(BuildContext context, ReqStatus s) async {
+  Future<bool> _decide(BuildContext context, ReqStatus s) async {
     final store = StoreScope.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final name = store.nameOf(r.empId);
@@ -403,19 +474,21 @@ class ApprovalTile extends StatelessWidget {
       );
       note = ctl.text;
       ctl.dispose();
-      if (ok != true) return;
+      if (ok != true) return false;
     }
     final err = await store.decide(r.id, s, note: note);
     if (err != null) {
       messenger.showSnackBar(SnackBar(content: Text(err)));
-      return;
+      return false;
     }
+    HapticFeedback.lightImpact();
     messenger.showSnackBar(SnackBar(
       content: Text(
           '${r.kind.label} $name ${s == ReqStatus.approved ? 'diluluskan' : 'ditolak'}'),
       action: SnackBarAction(
           label: 'Batal', onPressed: () => store.undoDecision(r.id)),
     ));
+    return true;
   }
 }
 

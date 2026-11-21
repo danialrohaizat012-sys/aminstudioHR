@@ -14,6 +14,7 @@ import 'payslips_screen.dart';
 import 'people_screen.dart';
 import 'profile_screen.dart';
 import 'requests_screen.dart';
+import 'welcome_tour.dart';
 
 /// Bottom-navigation shell. Employees and HR managers get different tabs.
 class Shell extends StatefulWidget {
@@ -25,6 +26,7 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   int index = 0;
+  bool _tourOpen = false;
 
   // Sign out after a period without touches, so a phone left on the counter
   // does not stay signed in to someone's payslips or the manager view.
@@ -68,6 +70,14 @@ class _ShellState extends State<Shell> {
     // During sign-out the old shell is still animating out; render nothing
     // rather than building screens that need a signed-in user.
     if (store.me == null) return const SizedBox.shrink();
+    if (store.needsTour && !_tourOpen) {
+      _tourOpen = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const WelcomeTour(), fullscreenDialog: true));
+        _tourOpen = false;
+      });
+    }
     final admin = store.isAdmin;
     final pendingCount = store.pending().where((r) => r.empId != store.me!.id).length;
     final unseen = admin ? 0 : store.unseenDecisions().length;

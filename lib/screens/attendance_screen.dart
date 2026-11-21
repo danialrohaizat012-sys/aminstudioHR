@@ -47,7 +47,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           Figure(label: 'Purata', value: '${avg.toStringAsFixed(1)} jam', note: 'sehari'),
         ]),
         if (rows.isEmpty)
-          const Card(child: Padding(padding: EdgeInsets.all(24), child: Center(child: Text('Tiada rekod bulan ini.'))))
+          const Card(
+              child: EmptyState(
+                  icon: Icons.event_busy_outlined,
+                  title: 'Tiada rekod bulan ini',
+                  message: 'Rekod muncul selepas anda punch masuk.'))
         else
           Card(
             clipBehavior: Clip.antiAlias,

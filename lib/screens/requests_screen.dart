@@ -21,8 +21,6 @@ class _RequestsScreenState extends State<RequestsScreen> {
     final store = StoreScope.of(context);
     final me = store.me!;
     final list = store.requestsOf(me.id, kind);
-    final t = Theme.of(context).textTheme;
-    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Permohonan')),
@@ -53,10 +51,10 @@ class _RequestsScreenState extends State<RequestsScreen> {
           ]),
         if (list.isEmpty)
           Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text('Belum ada permohonan ${kind.label.toLowerCase()}.',
-                  textAlign: TextAlign.center, style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+            child: EmptyState(
+              icon: requestIcon(kind),
+              title: 'Belum ada permohonan ${kind.label.toLowerCase()}',
+              message: 'Tekan butang Mohon di bawah untuk mula.',
             ),
           )
         else

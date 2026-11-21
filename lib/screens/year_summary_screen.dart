@@ -54,7 +54,11 @@ class _YearSummaryScreenState extends State<YearSummaryScreen> {
           Figure(label: 'PERKESO + SIP', value: rm(sum((r) => r.socso + r.eis))),
         ]),
         if (rows.isEmpty)
-          const Card(child: Padding(padding: EdgeInsets.all(24), child: Text('Tiada gaji dimuktamadkan untuk tahun ini.', textAlign: TextAlign.center)))
+          const Card(
+              child: EmptyState(
+                  icon: Icons.summarize_outlined,
+                  title: 'Tiada gaji dimuktamadkan tahun ini',
+                  message: 'Muktamadkan gaji bulanan di tab Gaji; jumlah tahunan dikira dari situ.'))
         else
           Card(
             clipBehavior: Clip.antiAlias,

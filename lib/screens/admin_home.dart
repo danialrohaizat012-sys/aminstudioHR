@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../format.dart';
 import '../models.dart';
 import '../store.dart';
+import '../theme.dart';
 import '../widgets/brand.dart';
 import '../widgets/common.dart';
 import 'announcements_screen.dart';
@@ -122,7 +123,7 @@ class AdminHome extends StatelessWidget {
           title: 'Menunggu kelulusan',
           action: pending.length > 3 ? TextAction('Semua (${pending.length})', onPressed: () => onGo(1)) : null,
           child: pending.isEmpty
-              ? const QuietText('Tiada permohonan menunggu.')
+              ? const QuietText('Semua permohonan sudah diproses.')
               : Column(children: [
                   for (var i = 0; i < pending.length && i < 3; i++) ...[
                     if (i > 0) const Divider(),
@@ -269,10 +270,28 @@ class _PunchRulesCard extends StatelessWidget {
             Icon(icon, size: 20, color: cs.onSurfaceVariant),
             const SizedBox(width: 12),
             Expanded(child: Text(label, style: t.bodyMedium)),
-            Tag(value, tone: tone),
+            const SizedBox(width: 8),
+            Flexible(child: Align(alignment: Alignment.centerRight, child: Tag(value, tone: tone))),
           ]),
         );
     void open() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PunchSettingsScreen()));
+    if (s.hasOffice) {
+      // Once set up, a single line is enough; the details are one tap away.
+      return Card(
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          onTap: open,
+          leading: Icon(Icons.verified_user_outlined, color: statusColors(context, 'ok').fg),
+          title: const Text('Punch dilindungi'),
+          subtitle: Text([
+            'radius ${fmtDistance(s.radiusM)}',
+            'lokasi wajib',
+            if (s.requireSelfie) 'selfie wajib',
+          ].join(' · ')),
+          trailing: const Icon(Icons.chevron_right),
+        ),
+      );
+    }
     return Section(
       title: 'Tetapan punch',
       action: TextAction('Ubah', onPressed: open),
@@ -307,16 +326,31 @@ class _Shortcuts extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     void go(Widget w) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => w));
-    Widget b(IconData i, String l, VoidCallback f) => FilledButton.tonalIcon(
-          onPressed: f,
-          icon: Icon(i, size: 18),
-          label: Text(l),
-          style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    Widget b(IconData i, String l, VoidCallback f) => Expanded(
+          child: InkWell(
+            onTap: f,
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Column(children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(16)),
+                  child: Icon(i, color: cs.onSecondaryContainer),
+                ),
+                const SizedBox(height: 6),
+                Text(l, textAlign: TextAlign.center, maxLines: 2, style: t.labelMedium),
+              ]),
+            ),
+          ),
         );
-    return Wrap(spacing: 8, runSpacing: 8, children: [
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       b(Icons.how_to_reg_outlined, 'Kehadiran', onAttendance),
       b(Icons.view_week_outlined, 'Roster', () => go(const RosterScreen())),
-      b(Icons.photo_camera_outlined, 'Job & komisen', () => go(const JobsScreen())),
+      b(Icons.photo_camera_outlined, 'Job', () => go(const JobsScreen())),
       b(Icons.calendar_month_outlined, 'Kalendar', () => go(const TeamCalendarScreen())),
     ]);
   }

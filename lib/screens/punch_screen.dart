@@ -242,6 +242,7 @@ class _PunchScreenState extends State<PunchScreen> {
       return;
     }
     HapticFeedback.mediumImpact();
+    if (mounted) await showPunchDone(context, widget.clockIn);
     nav.pop(true);
     messenger.showSnackBar(SnackBar(
       content: Text(
@@ -383,3 +384,47 @@ Future<bool?> showPrivacyNotice(BuildContext context) => showDialog<bool>(
         ],
       ),
     );
+
+/// A big tick for a moment, so staff know the punch went through.
+Future<void> showPunchDone(BuildContext context, bool clockIn) async {
+  final nav = Navigator.of(context, rootNavigator: true);
+  final cs = Theme.of(context).colorScheme;
+  final t = Theme.of(context).textTheme;
+  final done = showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: 'Selesai',
+    transitionDuration: const Duration(milliseconds: 260),
+    pageBuilder: (c, _, __) => Center(
+      child: Material(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(28),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(40, 32, 40, 28),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TweenAnimationBuilder<double>(
+              tween: Tween(begin: .4, end: 1),
+              duration: const Duration(milliseconds: 420),
+              curve: Curves.elasticOut,
+              builder: (_, v, child) => Transform.scale(scale: v, child: child),
+              child: Container(
+                width: 84,
+                height: 84,
+                decoration: BoxDecoration(color: statusColors(c, 'ok').bg, shape: BoxShape.circle),
+                child: Icon(Icons.check_rounded, size: 52, color: statusColors(c, 'ok').fg),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(clockIn ? 'Punch masuk berjaya' : 'Punch keluar berjaya',
+                style: t.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          ]),
+        ),
+      ),
+    ),
+    transitionBuilder: (_, a, __, child) => FadeTransition(opacity: a, child: child),
+  );
+  var open = true;
+  done.then((_) => open = false);
+  await Future.any([done, Future<void>.delayed(const Duration(milliseconds: 1100))]);
+  if (open) nav.pop();
+}

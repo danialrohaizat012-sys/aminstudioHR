@@ -27,6 +27,7 @@ class RosterScreen extends StatefulWidget {
 
 class _RosterScreenState extends State<RosterScreen> {
   late DateTime monday = mondayOf(DateTime.now());
+  late int dayIndex = DateTime.now().weekday - 1; // phone view: one day at a time
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +61,89 @@ class _RosterScreenState extends State<RosterScreen> {
               onPressed: () => setState(() => monday = monday.add(const Duration(days: 7))),
               icon: const Icon(Icons.chevron_right)),
         ]),
-        Card(
+        LayoutBuilder(builder: (context, box) {
+          if (box.maxWidth >= 640) return _table(context, days, today);
+          final d = days[dayIndex];
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                for (var i = 0; i < 7; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      showCheckmark: false,
+                      selected: i == dayIndex,
+                      onSelected: (_) => setState(() => dayIndex = i),
+                      label: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text(_dayShort[i], style: t.labelSmall),
+                        Text('${days[i].day}',
+                            style: t.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                decoration: ymd(days[i]) == today ? TextDecoration.underline : null)),
+                      ]),
+                    ),
+                  ),
+              ]),
+            ),
+            const SizedBox(height: 10),
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: Column(children: [
+                ListTile(
+                  title: Text(longDate(d), style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: store.settings.holidayNames[ymd(d)] != null
+                      ? Text(store.settings.holidayNames[ymd(d)]!)
+                      : !store.isWorkday(d)
+                          ? const Text('Kedai tutup')
+                          : null,
+                ),
+                for (final e in store.staff) ...[
+                  const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 10, 4),
+                    child: Row(children: [
+                      Avatar(e, radius: 16),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(e.name, overflow: TextOverflow.ellipsis)),
+                      SizedBox(width: 120, child: _Cell(emp: e, date: ymd(d), wide: true)),
+                    ]),
+                  ),
+                ],
+              ]),
+            ),
+          ]);
+        }),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final sh in store.settings.allShifts)
+            Chip(
+              avatar: CircleAvatar(backgroundColor: sh.id == 'biasa' ? cs.surfaceContainerHighest : shiftColor(context, sh.id)),
+              label: Text(sh.label),
+            ),
+          const Chip(label: Text('Off = hari rehat')),
+        ]),
+        OutlinedButton.icon(
+          onPressed: () async {
+            final store = StoreScope.of(context);
+            final messenger = ScaffoldMessenger.of(context);
+            final n = await store.copyRosterWeek(monday.subtract(const Duration(days: 7)), monday);
+            messenger.showSnackBar(SnackBar(content: Text('$n entri disalin dari minggu lepas')));
+          },
+          icon: const Icon(Icons.copy_all_outlined, size: 18),
+          label: const Text('Salin roster minggu lepas ke minggu ini'),
+        ),
+        Text('Tekan petak untuk tukar syif. Lewat dan balik awal dikira ikut syif setiap pekerja. '
+            'Hari tanpa tetapan ikut waktu biasa dan hari tutup kedai.',
+            style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+      ]),
+    );
+  }
+
+  Widget _table(BuildContext context, List<DateTime> days, String today) {
+    final store = StoreScope.of(context);
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    return Card(
           clipBehavior: Clip.antiAlias,
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -108,37 +191,15 @@ class _RosterScreenState extends State<RosterScreen> {
               ],
             ),
           ),
-        ),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          for (final sh in store.settings.allShifts)
-            Chip(
-              avatar: CircleAvatar(backgroundColor: sh.id == 'biasa' ? cs.surfaceContainerHighest : shiftColor(context, sh.id)),
-              label: Text(sh.label),
-            ),
-          const Chip(label: Text('Off = hari rehat')),
-        ]),
-        OutlinedButton.icon(
-          onPressed: () async {
-            final store = StoreScope.of(context);
-            final messenger = ScaffoldMessenger.of(context);
-            final n = await store.copyRosterWeek(monday.subtract(const Duration(days: 7)), monday);
-            messenger.showSnackBar(SnackBar(content: Text('$n entri disalin dari minggu lepas')));
-          },
-          icon: const Icon(Icons.copy_all_outlined, size: 18),
-          label: const Text('Salin roster minggu lepas ke minggu ini'),
-        ),
-        Text('Tekan petak untuk tukar syif. Lewat dan balik awal dikira ikut syif setiap pekerja. '
-            'Hari tanpa tetapan ikut waktu biasa dan hari tutup kedai.',
-            style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-      ]),
-    );
+        );
   }
 }
 
 class _Cell extends StatelessWidget {
-  const _Cell({required this.emp, required this.date});
+  const _Cell({required this.emp, required this.date, this.wide = false});
   final Employee emp;
   final String date;
+  final bool wide;
 
   @override
   Widget build(BuildContext context) {
@@ -158,7 +219,8 @@ class _Cell extends StatelessWidget {
       label = 'Off';
       bg = null;
     } else {
-      label = sh.name;
+      // The normal day stays quiet so changes stand out.
+      label = sh.id == 'biasa' ? (wide ? sh.label : '·') : (wide ? sh.label : sh.name);
       bg = sh.id == 'biasa' ? null : shiftColor(context, sh.id);
     }
 
@@ -176,7 +238,7 @@ class _Cell extends StatelessWidget {
         child: Text(label,
             textAlign: TextAlign.center,
             style: t.labelMedium?.copyWith(
-                color: sh == null && !onLeave ? cs.onSurfaceVariant : null,
+                color: (sh == null || sh.id == 'biasa') && !onLeave ? cs.onSurfaceVariant : null,
                 fontWeight: explicit != null ? FontWeight.w700 : null)),
       ),
     );
@@ -206,7 +268,12 @@ class _Cell extends StatelessWidget {
       ),
     );
     if (choice == null) return;
+    final before = store.roster['${emp.id}_$date'];
     await store.setRoster(emp.id, date, choice.isEmpty ? null : choice);
+    if (context.mounted) {
+      showUndo(context, 'Syif ${emp.firstName} ${fmtShort(date)} dikemas kini',
+          () => store.setRoster(emp.id, date, before));
+    }
   }
 }
 

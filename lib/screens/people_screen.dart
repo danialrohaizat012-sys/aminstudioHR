@@ -17,6 +17,7 @@ enum _Sort { name, longest, newest }
 
 class _PeopleScreenState extends State<PeopleScreen> {
   String q = '';
+  String? dept;
   _Sort sort = _Sort.name;
 
   @override
@@ -25,6 +26,7 @@ class _PeopleScreenState extends State<PeopleScreen> {
     final ql = q.toLowerCase();
     final list = store.employees
         .where((e) => ql.isEmpty || '${e.name} ${e.dept} ${e.position}'.toLowerCase().contains(ql))
+        .where((e) => dept == null || e.dept == dept)
         .toList()
       ..sort((a, b) {
         if (a.active != b.active) return a.active ? -1 : 1;
@@ -96,12 +98,26 @@ class _PeopleScreenState extends State<PeopleScreen> {
                   onSelected: (_) => setState(() => sort = v),
                 ),
               ),
+            const SizedBox(width: 4),
+            for (final d in ({for (final e in store.employees) if (e.dept.isNotEmpty) e.dept}.toList()..sort()))
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilterChip(
+                  label: Text(d),
+                  selected: dept == d,
+                  onSelected: (on) => setState(() => dept = on ? d : null),
+                ),
+              ),
           ]),
         ),
         Card(
           clipBehavior: Clip.antiAlias,
           child: list.isEmpty
-              ? Padding(padding: const EdgeInsets.all(24), child: Text('Tiada pekerja sepadan dengan “$q”.'))
+              ? EmptyState(
+                  icon: Icons.person_search_outlined,
+                  title: 'Tiada pekerja sepadan',
+                  message: q.isEmpty ? 'Cuba buang penapis jabatan.' : 'Tiada nama, jabatan atau jawatan “$q”.',
+                )
               : Column(children: [
                   for (var i = 0; i < list.length; i++) ...[
                     if (i > 0) const Divider(indent: 68),

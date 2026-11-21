@@ -15,6 +15,7 @@ class JobsScreen extends StatefulWidget {
 
 class _JobsScreenState extends State<JobsScreen> {
   late String month = ym(DateTime.now());
+  String? staffFilter, typeFilter;
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +23,9 @@ class _JobsScreenState extends State<JobsScreen> {
     final t = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
     final list = store.jobsIn(month);
+    final shown = list
+        .where((j) => (staffFilter == null || j.staff.containsKey(staffFilter)) && (typeFilter == null || j.typeId == typeFilter))
+        .toList();
     final total = list.fold(0.0, (s, j) => s + j.total);
     final finalised = store.payrun(month) != null;
     final perStaff = <String, double>{};
@@ -70,27 +74,95 @@ class _JobsScreenState extends State<JobsScreen> {
                   child: Row(children: [
                     Avatar(store.employeeById(r.key), radius: 16),
                     const SizedBox(width: 10),
-                    Expanded(child: Text(store.nameOf(r.key))),
-                    Text('${list.where((j) => j.staff.containsKey(r.key)).length} job · ',
-                        style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(store.nameOf(r.key)),
+                        Text('${list.where((j) => j.staff.containsKey(r.key)).length} job',
+                            style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                      ]),
+                    ),
+                    const SizedBox(width: 8),
                     Text(rm(r.value), style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
                   ]),
                 ),
             ]),
           ),
+        if (list.isNotEmpty)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              _filter<String>(
+                context,
+                icon: Icons.person_outline,
+                label: staffFilter == null ? 'Semua staf' : store.nameOf(staffFilter!),
+                value: staffFilter,
+                options: {for (final r in ranking) r.key: store.nameOf(r.key)},
+                onChanged: (v) => setState(() => staffFilter = v),
+              ),
+              const SizedBox(width: 8),
+              _filter<String>(
+                context,
+                icon: Icons.category_outlined,
+                label: typeFilter == null ? 'Semua jenis' : store.jobType(typeFilter!)?.name ?? 'Job',
+                value: typeFilter,
+                options: {for (final ty in store.settings.jobTypes) ty.id: ty.name},
+                onChanged: (v) => setState(() => typeFilter = v),
+              ),
+            ]),
+          ),
         if (list.isEmpty)
           Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text('Belum ada job untuk ${monthLabel(month)}.',
-                  textAlign: TextAlign.center, style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+            child: EmptyState(
+              icon: Icons.photo_camera_outlined,
+              title: 'Belum ada job ${monthLabel(month)}',
+              message: 'Rekod setiap kahwin, event atau sesi studio supaya komisen masuk gaji.',
+              action: finalised
+                  ? null
+                  : FilledButton.icon(
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => JobForm(month: month))),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Rekod job pertama'),
+                    ),
             ),
           )
+        else if (shown.isEmpty)
+          const Card(child: EmptyState(icon: Icons.filter_alt_off_outlined, title: 'Tiada job ikut penapis ini'))
         else
-          for (final j in list) JobCard(job: j, editable: !finalised),
+          for (final j in shown) JobCard(job: j, editable: !finalised),
       ]),
     );
   }
+}
+
+Widget _filter<T>(BuildContext context,
+    {required IconData icon,
+    required String label,
+    required T? value,
+    required Map<T, String> options,
+    required ValueChanged<T?> onChanged}) {
+  return InputChip(
+    avatar: Icon(icon, size: 18),
+    label: Text(label),
+    selected: value != null,
+    showCheckmark: false,
+    onDeleted: value == null ? null : () => onChanged(null),
+    onPressed: () async {
+      final v = await showModalBottomSheet<T>(
+        context: context,
+        builder: (c) => SafeArea(
+          child: ListView(shrinkWrap: true, children: [
+            for (final o in options.entries)
+              ListTile(
+                title: Text(o.value),
+                trailing: o.key == value ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.pop(c, o.key),
+              ),
+          ]),
+        ),
+      );
+      if (v != null) onChanged(v);
+    },
+  );
 }
 
 class JobCard extends StatelessWidget {
@@ -210,21 +282,16 @@ class _JobFormState extends State<JobForm> {
             icon: const Icon(Icons.delete_outline),
             onPressed: () async {
               final nav = Navigator.of(context);
-              final ok = await showDialog<bool>(
-                context: context,
-                builder: (c) => AlertDialog(
-                  title: const Text('Padam job ini?'),
-                  content: const Text('Komisen job ini akan ditolak dari gaji draf.'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Batal')),
-                    FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Padam')),
-                  ],
-                ),
-              );
-              if (ok != true) return;
-              final err = await store.deleteJob(widget.existing!.id);
+              final messenger = ScaffoldMessenger.of(context);
+              final old = widget.existing!;
+              final err = await store.deleteJob(old.id);
               if (err == null) {
                 nav.pop();
+                messenger.hideCurrentSnackBar();
+                messenger.showSnackBar(SnackBar(
+                  content: Text('"${old.title}" dipadam'),
+                  action: SnackBarAction(label: 'Batal', onPressed: () => store.saveJob(old)),
+                ));
               } else {
                 setState(() => error = err);
               }

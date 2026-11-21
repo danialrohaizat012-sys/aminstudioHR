@@ -45,6 +45,16 @@ class HrStore extends ChangeNotifier {
   /// Appearance on this device: 'system', 'light' or 'dark'.
   String themeChoice = 'system';
 
+  /// Employees who have seen the first-run guide on this device.
+  Set<String> toursSeen = {};
+  bool get needsTour => me != null && !isAdmin && !toursSeen.contains(me!.id);
+
+  Future<void> markTourSeen() async {
+    if (me == null) return;
+    toursSeen.add(me!.id);
+    await _commit();
+  }
+
   Future<void> setTheme(String choice) async {
     themeChoice = choice;
     await _commit();
@@ -1165,6 +1175,7 @@ class HrStore extends ChangeNotifier {
         'lockedUntil': lockedUntil,
         'seenUpTo': seenUpTo,
         'themeChoice': themeChoice,
+        'toursSeen': toursSeen.toList(),
         'roster': roster,
         'jobs': jobs.map((j) => j.toJson()).toList(),
         'adjustments': adjustments.map((k, v) => MapEntry(k, v.toJson())),
@@ -1187,6 +1198,7 @@ class HrStore extends ChangeNotifier {
     lockedUntil = Map<String, String>.from(j['lockedUntil'] ?? {});
     seenUpTo = Map<String, String>.from(j['seenUpTo'] ?? {});
     themeChoice = j['themeChoice'] ?? 'system';
+    toursSeen = {...(j['toursSeen'] as List? ?? []).cast<String>()};
     roster = Map<String, String>.from(j['roster'] ?? {});
     jobs = list('jobs').map(Job.fromJson).toList();
     adjustments = (j['adjustments'] as Map? ?? {})
@@ -1196,7 +1208,10 @@ class HrStore extends ChangeNotifier {
 
   /// Example company so every screen has something to show on first launch.
   /// "Set semula data demo" in Profil restores it.
-  void seedForTest() => _seed();
+  void seedForTest() {
+    _seed();
+    toursSeen = {for (final e in employees) e.id};
+  }
 
   void _seed() {
     settings = CompanySettings(shifts: [

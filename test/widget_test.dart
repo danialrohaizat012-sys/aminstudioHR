@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:pejabat_hr/main.dart';
+import 'package:pejabat_hr/screens/jobs_screen.dart';
+import 'package:pejabat_hr/screens/roster_screen.dart';
+import 'package:pejabat_hr/screens/team_calendar_screen.dart';
 import 'package:pejabat_hr/services/punch_devices.dart';
 import 'package:pejabat_hr/store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -54,7 +57,14 @@ void main() {
     await enterPin(tester, '000000');
     expect(find.textContaining('PIN salah'), findsOneWidget);
     await enterPin(tester, HrStore.demoPin);
+    // First sign-in on this device shows the short guide once.
+    expect(find.text('Punch masuk di kedai'), findsOneWidget);
+    await tester.tap(find.text('Seterusnya'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Langkau'));
+    await tester.pumpAndSettle();
     expect(find.text('Hai, Hafiz'), findsOneWidget);
+    expect(store.toursSeen, contains('e2'));
 
     await store.signOut();
     await tester.pumpAndSettle();
@@ -73,6 +83,7 @@ void main() {
     await store.load();
     await store.signInForTest('admin');
     await store.setOffice(6.1180, 102.2420);
+    store.toursSeen.add('e2');
     await store.signInForTest('e2'); // seed leaves Hafiz without a punch today
     await tester.pumpWidget(PejabatHrApp(store: store));
     await tester.pumpAndSettle();
@@ -95,6 +106,9 @@ void main() {
     await tester.tap(find.text('Punch masuk sekarang'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('Punch masuk berjaya'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
     final rec = store.attendanceOn('e2', store.attendance.values
         .where((a) => a.empId == 'e2')
         .map((a) => a.date)
@@ -112,6 +126,7 @@ void main() {
 
     final store = HrStore();
     await store.load();
+    store.toursSeen.add('e2');
     await store.signInForTest('e2');
     await tester.pumpWidget(PejabatHrApp(store: store));
     await tester.pumpAndSettle();
@@ -128,4 +143,37 @@ void main() {
     expect(tester.widget<FilledButton>(punchBtn).onPressed, isNull);
     expect(find.textContaining('lokasi telefon dimatikan', skipOffstage: false), findsOneWidget);
   });
+
+  for (final who in ['admin', 'e2']) {
+    testWidgets('home fits a small phone at 150% text size ($who)', (tester) async {
+      tester.view.physicalSize = const Size(360 * 3, 740 * 3);
+      tester.view.devicePixelRatio = 3;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final store = HrStore();
+      await store.load();
+      store.toursSeen.add('e2');
+      await store.signInForTest(who);
+      await tester.pumpWidget(PejabatHrApp(store: store));
+      await tester.pumpAndSettle();
+      // Scroll through the whole home page; any overflow throws.
+      for (var i = 0; i < 6; i++) {
+        await tester.drag(find.byType(Scrollable).first, const Offset(0, -500));
+        await tester.pumpAndSettle();
+      }
+      expect(tester.takeException(), isNull);
+      if (who != 'admin') return;
+      for (final screen in const [RosterScreen(), JobsScreen(), TeamCalendarScreen()]) {
+        final nav = tester.state<NavigatorState>(find.byType(Navigator).first);
+        nav.push(MaterialPageRoute(builder: (_) => screen));
+        await tester.pumpAndSettle();
+        await tester.drag(find.byType(Scrollable).last, const Offset(0, -600));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: '${screen.runtimeType}');
+        nav.pop();
+        await tester.pumpAndSettle();
+      }
+    });
+  }
 }

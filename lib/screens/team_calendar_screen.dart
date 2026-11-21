@@ -59,7 +59,7 @@ class _TeamCalendarScreenState extends State<TeamCalendarScreen> {
                     Expanded(
                       child: Builder(builder: (context) {
                         final n = r * 7 + c - lead + 1;
-                        if (n < 1 || n > daysInMonth) return const SizedBox(height: 64);
+                        if (n < 1 || n > daysInMonth) return const SizedBox(height: 70);
                         return _DayCell(date: '$month-${two(n)}', isToday: '$month-${two(n)}' == today);
                       }),
                     ),
@@ -69,8 +69,8 @@ class _TeamCalendarScreenState extends State<TeamCalendarScreen> {
         ),
         Wrap(spacing: 14, runSpacing: 6, children: [
           _legend(context, statusColors(context, 'bad').fg, 'Cuti umum'),
-          _legend(context, statusColors(context, 'warn').fg, 'Cuti pekerja'),
-          _legend(context, cs.primaryContainer, 'Job'),
+          _legend(context, statusColors(context, 'warn').fg, 'Cuti pekerja', Icons.luggage_outlined),
+          _legend(context, cs.onSurface, 'Job', Icons.photo_camera_outlined),
           _legend(context, cs.outline, 'Kedai tutup'),
         ]),
         Text('Tekan tarikh untuk butiran: siapa cuti, job, dan syif yang berubah.',
@@ -79,8 +79,8 @@ class _TeamCalendarScreenState extends State<TeamCalendarScreen> {
     );
   }
 
-  Widget _legend(BuildContext context, Color c, String label) => Row(mainAxisSize: MainAxisSize.min, children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
+  Widget _legend(BuildContext context, Color c, String label, [IconData? icon]) => Row(mainAxisSize: MainAxisSize.min, children: [
+        icon != null ? Icon(icon, size: 14, color: c) : Container(width: 10, height: 10, decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
         const SizedBox(width: 6),
         Text(label, style: Theme.of(context).textTheme.bodySmall),
       ]);
@@ -110,8 +110,8 @@ class _DayCell extends StatelessWidget {
         builder: (_) => _DaySheet(date: date),
       ),
       child: Container(
-        height: 64,
-        margin: const EdgeInsets.all(2),
+        height: 70,
+        margin: const EdgeInsets.all(1.5),
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: closed && !holiday ? cs.surfaceContainer : null,
@@ -125,8 +125,8 @@ class _DayCell extends StatelessWidget {
           const Spacer(),
           Wrap(spacing: 3, runSpacing: 2, children: [
             if (holiday) _dot(statusColors(context, 'bad').fg),
-            if (leave.isNotEmpty) _count(context, statusColors(context, 'warn'), leave.length),
-            if (jobs > 0) _count(context, (bg: cs.primaryContainer, fg: cs.onPrimaryContainer), jobs),
+            if (leave.isNotEmpty) _count(context, statusColors(context, 'warn'), Icons.luggage_outlined, leave.length),
+            if (jobs > 0) _count(context, (bg: cs.primaryContainer, fg: cs.onPrimaryContainer), Icons.photo_camera_outlined, jobs),
           ]),
         ]),
       ),
@@ -135,10 +135,13 @@ class _DayCell extends StatelessWidget {
 
   Widget _dot(Color c) => Container(width: 8, height: 8, decoration: BoxDecoration(color: c, shape: BoxShape.circle));
 
-  Widget _count(BuildContext context, ({Color bg, Color fg}) c, int n) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+  Widget _count(BuildContext context, ({Color bg, Color fg}) c, IconData icon, int n) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
         decoration: BoxDecoration(color: c.bg, borderRadius: BorderRadius.circular(6)),
-        child: Text('$n', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: c.fg, fontWeight: FontWeight.w700)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 11, color: c.fg),
+          if (n > 1) Text('$n', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: c.fg, fontWeight: FontWeight.w700, fontSize: 10)),
+        ]),
       );
 }
 
@@ -181,7 +184,7 @@ class _DaySheet extends StatelessWidget {
         if (!store.isWorkday(parseYmd(date)) && holiday == null)
           const Padding(padding: EdgeInsets.only(top: 6), child: Tag('Kedai tutup')),
         head('Cuti (${leave.length})'),
-        if (leave.isEmpty) const QuietText('Tiada.'),
+        if (leave.isEmpty) const QuietText('Semua staf bekerja.'),
         for (final r in leave)
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -191,7 +194,7 @@ class _DaySheet extends StatelessWidget {
             trailing: StatusChip(r.status),
           ),
         head('Job (${jobs.length})'),
-        if (jobs.isEmpty) const QuietText('Tiada.'),
+        if (jobs.isEmpty) const QuietText('Tiada job direkod.'),
         for (final j in jobs)
           ListTile(
             contentPadding: EdgeInsets.zero,
