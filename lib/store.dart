@@ -344,7 +344,9 @@ class HrStore extends ChangeNotifier {
 
   bool isFlagged(PunchMark? m) => m != null && m.note.isNotEmpty;
 
-  PunchMark _mark({double? lat, double? lng, double? accuracy, String? photo, String note = ''}) => PunchMark(
+  PunchMark _mark(
+          {double? lat, double? lng, double? accuracy, String? photo, String note = '', String? address, String? device}) =>
+      PunchMark(
         time: hm(now),
         lat: lat,
         lng: lng,
@@ -352,6 +354,8 @@ class HrStore extends ChangeNotifier {
         distance: distanceToOffice(lat, lng),
         photo: photo,
         note: note,
+        address: address,
+        device: device,
       );
 
   /// Why a punch cannot be recorded, or null when it can. Location is always
@@ -374,7 +378,14 @@ class HrStore extends ChangeNotifier {
 
   /// Returns null on success, or the reason the punch was refused.
   Future<String?> punchIn(
-      {double? lat, double? lng, double? accuracy, String? photo, String note = '', bool mocked = false}) async {
+      {double? lat,
+      double? lng,
+      double? accuracy,
+      String? photo,
+      String note = '',
+      bool mocked = false,
+      String? address,
+      String? device}) async {
     final e = me!;
     final d = ymd(now);
     if (attendanceOn(e.id, d)?.clockIn != null) return 'Anda sudah punch masuk hari ini.';
@@ -384,7 +395,7 @@ class HrStore extends ChangeNotifier {
       empId: e.id,
       date: d,
       clockIn: hm(now),
-      inMark: _mark(lat: lat, lng: lng, accuracy: accuracy, photo: photo, note: note),
+      inMark: _mark(lat: lat, lng: lng, accuracy: accuracy, photo: photo, note: note, address: address, device: device),
     );
     await _commit();
     return null;
@@ -392,17 +403,109 @@ class HrStore extends ChangeNotifier {
 
   /// Returns null on success, or the reason the punch was refused.
   Future<String?> punchOut(
-      {double? lat, double? lng, double? accuracy, String? photo, String note = '', bool mocked = false}) async {
+      {double? lat,
+      double? lng,
+      double? accuracy,
+      String? photo,
+      String note = '',
+      bool mocked = false,
+      String? address,
+      String? device}) async {
     final rec = attendanceOn(me!.id, ymd(now));
     if (rec == null || rec.clockIn == null) return 'Punch masuk dahulu.';
     if (rec.clockOut != null) return 'Anda sudah punch keluar hari ini.';
     final blocked = punchBlocker(lat: lat, lng: lng, photo: photo, note: note, mocked: mocked);
     if (blocked != null) return blocked;
+    rec.openBreak?.end = hm(now); // punching out ends any break still running
     rec.clockOut = hm(now);
-    rec.outMark = _mark(lat: lat, lng: lng, accuracy: accuracy, photo: photo, note: note);
+    rec.outMark = _mark(lat: lat, lng: lng, accuracy: accuracy, photo: photo, note: note, address: address, device: device);
     await _commit();
     return null;
   }
+
+  /// Start a break (meal, prayers) while clocked in.
+  Future<String?> startBreak(String label) async {
+    final rec = attendanceOn(me!.id, ymd(now));
+    if (rec?.clockIn == null || rec!.clockOut != null) return 'Punch masuk dahulu.';
+    if (rec.openBreak != null) return 'Anda sedang berehat.';
+    rec.breaks.add(BreakSession(label: label, start: hm(now)));
+    await _commit();
+    return null;
+  }
+
+  Future<String?> endBreak() async {
+    final rec = attendanceOn(me!.id, ymd(now));
+    final b = rec?.openBreak;
+    if (b == null) return 'Tiada rehat yang sedang berjalan.';
+    b.end = hm(now);
+    await _commit();
+    return null;
+  }
+
+  static int _min(String t) => int.parse(t.substring(0, 2)) * 60 + int.parse(t.substring(3, 5));
+
+  /// Minutes of one break; a running break counts up to now (today) or to
+  /// clock-out.
+  int breakMinutes(BreakSession b, {String? until}) {
+    final end = b.end ?? until ?? hm(now);
+    return math.max(0, _min(end) - _min(b.start));
+  }
+
+  /// Minutes worked: clock-in to clock-out (or now while still clocked in
+  /// today), less breaks.
+  int workedMinutes(AttendanceRecord r) {
+    if (r.clockIn == null) return 0;
+    final end = r.clockOut ?? (r.date == ymd(now) ? hm(now) : r.clockIn!);
+    final gross = math.max(0, _min(end) - _min(r.clockIn!));
+    final breaks = r.breaks.fold<int>(0, (s, b) => s + breakMinutes(b, until: end));
+    return math.max(0, gross - breaks);
+  }
+
+  /// Minutes after the start time, or 0.
+  int lateMinutes(AttendanceRecord r) =>
+      r.clockIn == null ? 0 : math.max(0, _min(r.clockIn!) - _min(settings.startTime));
+
+  /// One employee's month: days present, late (with total minutes and dates),
+  /// absent, on leave, early leaves and hours worked. Counts up to today.
+  MonthSummary monthSummary(Employee e, String month) {
+    final p = month.split('-');
+    final first = DateTime(int.parse(p[0]), int.parse(p[1]), 1);
+    final last = DateTime(first.year, first.month + 1, 0);
+    final today = DateTime(now.year, now.month, now.day);
+    final sum = MonthSummary();
+    for (var d = first; !d.isAfter(last) && !d.isAfter(today); d = d.add(const Duration(days: 1))) {
+      final key = ymd(d);
+      if (e.joinDate.isAfter(d)) continue;
+      final status = dayStatus(e, key);
+      final rec = attendanceOn(e.id, key);
+      if (status == DayStatus.restDay && rec?.clockIn == null) continue;
+      sum.workdays++;
+      switch (status) {
+        case DayStatus.present:
+        case DayStatus.late:
+          sum.present++;
+          sum.workedMinutes += workedMinutes(rec!);
+          if (status == DayStatus.late) {
+            sum.lateDays.add(key);
+            sum.lateMinutes += lateMinutes(rec);
+          }
+          if (isEarlyLeave(rec)) sum.earlyLeave++;
+          if (isFlagged(rec.inMark) || isFlagged(rec.outMark)) sum.outside++;
+        case DayStatus.onLeave:
+          sum.leave++;
+        case DayStatus.absent:
+          // Today does not count as absent until the day is over.
+          if (key != ymd(now)) sum.absentDays.add(key);
+        case DayStatus.restDay:
+        case DayStatus.upcoming:
+          break;
+      }
+    }
+    return sum;
+  }
+
+  bool isEarlyLeave(AttendanceRecord r) =>
+      r.clockOut != null && r.clockOut!.compareTo(settings.endTime) < 0 && isWorkday(parseYmd(r.date));
 
   /// HR correction of a day's times. Clearing both removes the record.
   Future<void> correctAttendance(String empId, String date, String? clockIn, String? clockOut) async {
@@ -755,7 +858,7 @@ class HrStore extends ChangeNotifier {
     // Ten working days of attendance, today only for some staff.
     attendance = {};
     final rnd = math.Random(7);
-    var d = t.subtract(const Duration(days: 14));
+    var d = t.subtract(const Duration(days: 35)); // a full month for the summary
     while (!d.isAfter(t)) {
       if (isWorkday(d)) {
         for (final e in employees) {
@@ -763,12 +866,30 @@ class HrStore extends ChangeNotifier {
           if (isToday && (e.id == 'e2' || e.id == 'e1' || t.hour < 8)) continue;
           final lateMin = rnd.nextInt(10) == 0 ? 10 + rnd.nextInt(25) : -rnd.nextInt(20);
           final inT = DateTime(d.year, d.month, d.day, 9).add(Duration(minutes: lateMin));
-          final outT = inT.add(Duration(hours: 9, minutes: rnd.nextInt(30)));
+          final outT = DateTime(d.year, d.month, d.day, 18).add(Duration(minutes: rnd.nextInt(25) - (rnd.nextInt(12) == 0 ? 40 : 0)));
+          const devices = {
+            'admin': 'iPhone 15',
+            'e1': 'Samsung SM-A556E',
+            'e2': 'iPhone 14 Plus',
+            'e3': 'Xiaomi Redmi Note 13',
+            'e4': 'OPPO CPH2591',
+          };
+          PunchMark mark(DateTime at) => PunchMark(
+                time: hm(at),
+                lat: 6.1180 + (rnd.nextDouble() - .5) * .0006,
+                lng: 102.2420 + (rnd.nextDouble() - .5) * .0006,
+                accuracy: 8 + rnd.nextInt(20).toDouble(),
+                address: 'Jalan Kuala Krai, Kampung Sireh, Kota Bharu, Kelantan, 15050',
+                device: devices[e.id],
+              );
           attendance['${e.id}_${ymd(d)}'] = AttendanceRecord(
             empId: e.id,
             date: ymd(d),
             clockIn: hm(inT),
             clockOut: isToday ? null : hm(outT),
+            inMark: mark(inT),
+            outMark: isToday ? null : mark(outT),
+            breaks: isToday ? [] : [BreakSession(label: 'Rehat makan & solat', start: '13:0${rnd.nextInt(9)}', end: '14:0${rnd.nextInt(9)}')],
           );
         }
       }
@@ -816,6 +937,15 @@ class HrStore extends ChangeNotifier {
     ];
     settings = CompanySettings();
   }
+}
+
+class MonthSummary {
+  int workdays = 0, present = 0, leave = 0, earlyLeave = 0, outside = 0;
+  int lateMinutes = 0, workedMinutes = 0;
+  final List<String> lateDays = [], absentDays = [];
+
+  int get late => lateDays.length;
+  int get absent => absentDays.length;
 }
 
 class Reminder {

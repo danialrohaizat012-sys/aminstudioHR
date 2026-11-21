@@ -1,15 +1,29 @@
-import 'dart:convert';
-
 import 'package:material_ui/material_ui.dart';
 
 import '../format.dart';
 import '../models.dart';
 import '../store.dart';
 import '../widgets/common.dart';
-import 'punch_screen.dart';
+import 'attendance_detail_screen.dart';
+import 'attendance_summary_screen.dart';
 import 'punch_settings_screen.dart';
 
-/// HR view of one day: who punched, when, from where, and corrections.
+enum _Filter { all, working, out, late, absent, leave, outside }
+
+extension on _Filter {
+  String get label => switch (this) {
+        _Filter.all => 'Semua',
+        _Filter.working => 'Sedang bekerja',
+        _Filter.out => 'Sudah keluar',
+        _Filter.late => 'Lewat',
+        _Filter.absent => 'Tiada rekod',
+        _Filter.leave => 'Bercuti',
+        _Filter.outside => 'Luar kawasan',
+      };
+}
+
+/// HR view of one day: who punched in and out, when, from where, with
+/// filters for the cases that need attention.
 class AttendanceAdminScreen extends StatefulWidget {
   const AttendanceAdminScreen({super.key});
   @override
@@ -18,30 +32,48 @@ class AttendanceAdminScreen extends StatefulWidget {
 
 class _AttendanceAdminScreenState extends State<AttendanceAdminScreen> {
   late DateTime day = DateTime.now();
+  _Filter filter = _Filter.all;
 
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
     final date = ymd(day);
     final staff = store.staff;
-    final rows = [for (final e in staff) (e, store.attendanceOn(e.id, date), store.dayStatus(e, date))];
-    int count(DayStatus s) => rows.where((r) => r.$3 == s).length;
-    final flagged = rows.where((r) => store.isFlagged(r.$2?.inMark) || store.isFlagged(r.$2?.outMark)).length;
     final isToday = date == ymd(store.now);
     final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
 
-    // Problems first: absent, flagged, late; then everyone else by name.
-    int rank((Employee, AttendanceRecord?, DayStatus) r) {
-      if (r.$3 == DayStatus.absent) return 0;
-      if (store.isFlagged(r.$2?.inMark) || store.isFlagged(r.$2?.outMark)) return 1;
-      if (r.$3 == DayStatus.late) return 2;
-      return 3;
+    bool matches(Employee e, _Filter f) {
+      final rec = store.attendanceOn(e.id, date);
+      final st = store.dayStatus(e, date);
+      return switch (f) {
+        _Filter.all => true,
+        _Filter.working => rec?.clockIn != null && rec!.clockOut == null,
+        _Filter.out => rec?.clockOut != null,
+        _Filter.late => st == DayStatus.late,
+        _Filter.absent => st == DayStatus.absent,
+        _Filter.leave => st == DayStatus.onLeave,
+        _Filter.outside => store.isFlagged(rec?.inMark) || store.isFlagged(rec?.outMark),
+      };
     }
 
-    rows.sort((a, b) => rank(a) != rank(b) ? rank(a) - rank(b) : a.$1.name.compareTo(b.$1.name));
+    final rows = staff.where((e) => matches(e, filter)).toList()
+      ..sort((a, b) {
+        final ra = store.attendanceOn(a.id, date)?.clockIn ?? '99';
+        final rb = store.attendanceOn(b.id, date)?.clockIn ?? '99';
+        return ra != rb ? ra.compareTo(rb) : a.name.compareTo(b.name);
+      });
+    final clockedIn = staff.where((e) => store.attendanceOn(e.id, date)?.clockIn != null).length;
+    final clockedOut = staff.where((e) => store.attendanceOn(e.id, date)?.clockOut != null).length;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Kehadiran pekerja'), actions: [
+        IconButton(
+          tooltip: 'Ringkasan bulanan',
+          onPressed: () =>
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AttendanceSummaryScreen())),
+          icon: const Icon(Icons.insights_outlined),
+        ),
         IconButton(
           tooltip: 'Tetapan punch',
           icon: const Icon(Icons.tune),
@@ -78,11 +110,39 @@ class _AttendanceAdminScreenState extends State<AttendanceAdminScreen> {
           ),
         ]),
         FigureStrip(items: [
-          Figure(label: 'Hadir', value: '${count(DayStatus.present) + count(DayStatus.late)} / ${staff.length}'),
-          Figure(label: 'Lewat', value: '${count(DayStatus.late)}', note: 'selepas ${store.settings.startTime}'),
-          Figure(label: 'Tiada rekod', value: '${count(DayStatus.absent)}'),
-          Figure(label: 'Luar kawasan', value: '$flagged', note: 'perlu disemak'),
+          Figure(
+            label: 'Punch masuk',
+            value: '$clockedIn / ${staff.length}',
+            progress: staff.isEmpty ? 0 : clockedIn / staff.length,
+          ),
+          Figure(label: 'Punch keluar', value: '$clockedOut / ${staff.length}'),
         ]),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(
+            leading: const Icon(Icons.insights_outlined),
+            title: const Text('Ringkasan bulanan'),
+            subtitle: const Text('Jumlah hari lewat, tiada rekod dan jam bekerja setiap pekerja'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () =>
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AttendanceSummaryScreen())),
+          ),
+        ),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (final f in _Filter.values)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text('${f.label} ${staff.where((e) => matches(e, f)).length}'),
+                  selected: filter == f,
+                  showCheckmark: false,
+                  onSelected: (_) => setState(() => filter = f),
+                ),
+              ),
+          ]),
+        ),
         if (!store.settings.hasOffice)
           Card(
             child: ListTile(
@@ -93,169 +153,77 @@ class _AttendanceAdminScreenState extends State<AttendanceAdminScreen> {
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PunchSettingsScreen())),
             ),
           ),
-        Card(
-          clipBehavior: Clip.antiAlias,
-          child: Column(children: [
-            for (var i = 0; i < rows.length; i++) ...[
-              if (i > 0) const Divider(indent: 68),
-              _Row(emp: rows[i].$1, rec: rows[i].$2, status: rows[i].$3, date: date),
-            ],
-          ]),
-        ),
-      ]),
-    );
-  }
-}
-
-class _Row extends StatelessWidget {
-  const _Row({required this.emp, required this.rec, required this.status, required this.date});
-  final Employee emp;
-  final AttendanceRecord? rec;
-  final DayStatus status;
-  final String date;
-
-  @override
-  Widget build(BuildContext context) {
-    final store = StoreScope.of(context);
-    final t = Theme.of(context).textTheme;
-    final cs = Theme.of(context).colorScheme;
-    final flagged = store.isFlagged(rec?.inMark) || store.isFlagged(rec?.outMark);
-    final times = rec?.clockIn == null ? '' : '${rec!.clockIn} → ${rec!.clockOut ?? 'belum keluar'}';
-    return ListTile(
-      leading: Avatar(emp),
-      title: Text(emp.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(
-        [
-          if (times.isNotEmpty) times,
-          if (rec?.inMark?.distance != null) fmtDistance(rec!.inMark!.distance!),
-          if (rec?.editedBy != null) 'dibetulkan HR',
-        ].join(' · ').ifEmpty(emp.dept),
-        style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-      ),
-      trailing: Wrap(spacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
-        if (flagged) const Tag('Luar kawasan', tone: 'warn'),
-        if (status != DayStatus.upcoming && !(flagged && status == DayStatus.present)) Tag(status.label, tone: status.tone),
-      ]),
-      onTap: () => showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        builder: (_) => _Detail(emp: emp, date: date),
-      ),
-    );
-  }
-}
-
-extension on String {
-  String ifEmpty(String other) => isEmpty ? other : this;
-}
-
-class _Detail extends StatefulWidget {
-  const _Detail({required this.emp, required this.date});
-  final Employee emp;
-  final String date;
-  @override
-  State<_Detail> createState() => _DetailState();
-}
-
-class _DetailState extends State<_Detail> {
-  @override
-  Widget build(BuildContext context) {
-    final store = StoreScope.of(context);
-    final rec = store.attendanceOn(widget.emp.id, widget.date);
-    final t = Theme.of(context).textTheme;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          Avatar(widget.emp, radius: 22),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(widget.emp.name, style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-              Text(longDate(parseYmd(widget.date)), style: t.bodySmall),
-            ]),
-          ),
-        ]),
-        const SizedBox(height: 16),
-        _MarkTile(label: 'Masuk', time: rec?.clockIn, mark: rec?.inMark),
-        const SizedBox(height: 8),
-        _MarkTile(label: 'Keluar', time: rec?.clockOut, mark: rec?.outMark),
-        if (rec?.editedBy != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Text('Masa dibetulkan oleh ${rec!.editedBy}', style: t.bodySmall),
-          ),
-        const SizedBox(height: 16),
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-          onPressed: () => _correct(context, rec),
-          icon: const Icon(Icons.edit_outlined, size: 18),
-          label: const Text('Betulkan masa'),
-        ),
-      ]),
-    );
-  }
-
-  Future<void> _correct(BuildContext context, AttendanceRecord? rec) async {
-    final store = StoreScope.of(context);
-    TimeOfDay? parse(String? v) =>
-        v == null ? null : TimeOfDay(hour: int.parse(v.split(':')[0]), minute: int.parse(v.split(':')[1]));
-    String fmt(TimeOfDay v) => '${two(v.hour)}:${two(v.minute)}';
-    final inT = await showTimePicker(
-        context: context, helpText: 'Masa masuk', initialTime: parse(rec?.clockIn) ?? const TimeOfDay(hour: 9, minute: 0));
-    if (inT == null || !context.mounted) return;
-    final outT = await showTimePicker(
-        context: context, helpText: 'Masa keluar (batal = belum keluar)', initialTime: parse(rec?.clockOut) ?? const TimeOfDay(hour: 18, minute: 0));
-    await store.correctAttendance(widget.emp.id, widget.date, fmt(inT), outT == null ? null : fmt(outT));
-    if (mounted) setState(() {});
-  }
-}
-
-class _MarkTile extends StatelessWidget {
-  const _MarkTile({required this.label, required this.time, required this.mark});
-  final String label;
-  final String? time;
-  final PunchMark? mark;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    final cs = Theme.of(context).colorScheme;
-    final m = mark;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: cs.surfaceContainer, borderRadius: BorderRadius.circular(14)),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        if (m?.photo != null)
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.memory(base64Decode(m!.photo!), width: 64, height: 64, fit: BoxFit.cover),
+        if (rows.isEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('Tiada pekerja dalam "${filter.label}".',
+                  textAlign: TextAlign.center, style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
             ),
-          ),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('$label  ${time ?? '—'}', style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-            if (m == null && time != null) Text('Dimasukkan oleh HR', style: t.bodySmall),
-            if (m != null && !m.hasLocation) Text('Tiada lokasi', style: t.bodySmall),
-            if (m?.hasLocation == true)
-              Text(
-                '${m!.distance != null ? '${fmtDistance(m.distance!)} dari kedai · ' : ''}'
-                '${m.lat!.toStringAsFixed(5)}, ${m.lng!.toStringAsFixed(5)}'
-                '${m.accuracy != null ? ' (±${m.accuracy!.round()} m)' : ''}',
-                style: t.bodySmall,
+          )
+        else
+          for (final e in rows) _PersonCard(emp: e, date: date),
+      ]),
+    );
+  }
+}
+
+class _PersonCard extends StatelessWidget {
+  const _PersonCard({required this.emp, required this.date});
+  final Employee emp;
+  final String date;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final rec = store.attendanceOn(emp.id, date);
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final isToday = date == ymd(store.now);
+
+    final String state;
+    if (rec?.clockIn == null) {
+      state = store.dayStatus(emp, date) == DayStatus.onLeave ? 'Bercuti' : 'Belum punch masuk';
+    } else if (rec!.clockOut != null) {
+      state = 'Keluar ${rec.clockOut} · bekerja ${fmtMinutes(store.workedMinutes(rec))}';
+    } else if (rec.openBreak != null) {
+      state = '${rec.openBreak!.label} sejak ${rec.openBreak!.start}';
+    } else {
+      state = isToday ? 'Sedang bekerja · ${fmtMinutes(store.workedMinutes(rec))}' : 'Tiada punch keluar';
+    }
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.of(context)
+            .push(MaterialPageRoute(builder: (_) => AttendanceDetailScreen(empId: emp.id, date: date))),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              PunchAvatar(employee: emp, photo: rec?.inMark?.photo, radius: 26),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(emp.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Wrap(spacing: 4, runSpacing: 4, children: dayTags(store, emp, date)),
+                ]),
               ),
-            if (m != null && m.note.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text('Sebab: ${m.note}', style: t.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
-              ),
+              if (rec?.clockIn != null)
+                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text('Masuk', style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                  Text(rec!.clockIn!, style: t.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                ]),
+            ]),
+            const Divider(height: 20),
+            Text(state, textAlign: TextAlign.center, style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
           ]),
         ),
-      ]),
+      ),
     );
   }
 }

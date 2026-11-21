@@ -20,6 +20,10 @@ class FakeDevices implements PunchDevices {
   Future<String?> selfie() async => _pixel;
   @override
   Future<String?> receipt() async => _pixel;
+  @override
+  Future<String?> address(double lat, double lng) async => 'Jalan Kuala Krai, Kota Bharu, Kelantan';
+  @override
+  Future<String?> deviceName() async => 'Pixel 7';
 }
 
 Future<void> enterPin(WidgetTester tester, String pin) async {

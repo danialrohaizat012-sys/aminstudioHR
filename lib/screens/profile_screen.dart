@@ -155,7 +155,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController name;
-  late TimeOfDay start;
+  late TimeOfDay start, end;
   late Set<int> weekend;
   bool _ready = false;
 
@@ -170,6 +170,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     name = TextEditingController(text: s.name);
     final p = s.startTime.split(':');
     start = TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1]));
+    final q = s.endTime.split(':');
+    end = TimeOfDay(hour: int.parse(q[0]), minute: int.parse(q[1]));
     weekend = {...s.weekendDays};
   }
 
@@ -206,6 +208,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () async {
                 final v = await showTimePicker(context: context, initialTime: start);
                 if (v != null) setState(() => start = v);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              title: const Text('Waktu tamat kerja'),
+              subtitle: const Text('Punch keluar sebelum waktu ini ditanda balik awal'),
+              trailing: Text('${two(end.hour)}:${two(end.minute)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+              onTap: () async {
+                final v = await showTimePicker(context: context, initialTime: end);
+                if (v != null) setState(() => end = v);
               },
             ),
             const Divider(),
@@ -246,6 +258,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             final st = store.settings
               ..name = name.text.trim()
               ..startTime = '${two(start.hour)}:${two(start.minute)}'
+              ..endTime = '${two(end.hour)}:${two(end.minute)}'
               ..weekendDays = (weekend.toList()..sort());
             final nav = Navigator.of(context);
             await store.updateSettings(st);

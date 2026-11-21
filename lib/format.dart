@@ -89,3 +89,9 @@ String tenure(DateTime join) {
   final parts = [if (y > 0) '$y thn', if (months > 0) '$months bln'];
   return parts.isEmpty ? 'Baru' : parts.join(' ');
 }
+
+/// 485 -> "8j 05m", 42 -> "42m".
+String fmtMinutes(int m) {
+  if (m < 60) return '${m}m';
+  return '${m ~/ 60}j ${two(m % 60)}m';
+}

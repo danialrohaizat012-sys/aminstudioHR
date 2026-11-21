@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../format.dart';
 import '../store.dart';
 import '../widgets/common.dart';
+import 'attendance_detail_screen.dart';
 import 'employee_home.dart';
 
 class AttendanceScreen extends StatefulWidget {
@@ -52,13 +53,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               for (var i = 0; i < rows.length; i++) ...[
                 if (i > 0) const Divider(indent: 16, endIndent: 16),
                 ListTile(
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => AttendanceDetailScreen(empId: me.id, date: rows[i].date))),
                   title: Text(longDate(parseYmd(rows[i].date)), style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                  subtitle: Text('${rows[i].clockIn ?? '—'}  →  ${rows[i].clockOut ?? 'belum keluar'}',
+                  subtitle: Text(
+                      '${rows[i].clockIn ?? '—'}  →  ${rows[i].clockOut ?? 'belum keluar'}'
+                      '${rows[i].breaks.isNotEmpty ? ' · ${rows[i].breaks.length} rehat' : ''}',
                       style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
                   trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                    if (store.isLate(rows[i])) const Padding(padding: EdgeInsets.only(right: 8), child: Tag('Lewat', tone: 'warn')),
-                    Text(rows[i].clockOut == null ? '' : '${hoursBetween(rows[i].clockIn, rows[i].clockOut).toStringAsFixed(1)} j',
+                    if (store.isLate(rows[i])) const Padding(padding: EdgeInsets.only(right: 6), child: Tag('Lewat', tone: 'warn')),
+                    if (store.isEarlyLeave(rows[i]))
+                      const Padding(padding: EdgeInsets.only(right: 6), child: Tag('Balik awal', tone: 'warn')),
+                    Text(rows[i].clockIn == null ? '' : fmtMinutes(store.workedMinutes(rows[i])),
                         style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    const Icon(Icons.chevron_right),
                   ]),
                 ),
               ],

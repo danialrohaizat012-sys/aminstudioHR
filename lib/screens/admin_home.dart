@@ -7,6 +7,7 @@ import '../widgets/brand.dart';
 import '../widgets/common.dart';
 import 'announcements_screen.dart';
 import 'attendance_admin_screen.dart';
+import 'attendance_summary_screen.dart';
 import 'employee_home.dart';
 import 'punch_screen.dart';
 import 'punch_settings_screen.dart';
@@ -38,6 +39,10 @@ class AdminHome extends StatelessWidget {
     final lines = run?.lines ?? store.draftLines(month);
     final net = lines.fold(0.0, (s, l) => s + l.net);
     final reminders = store.reminders();
+    final lateBoard = [for (final e in staff) (e, store.monthSummary(e, month))]
+        .where((r) => r.$2.late > 0)
+        .toList()
+      ..sort((a, b) => b.$2.late != a.$2.late ? b.$2.late - a.$2.late : b.$2.lateMinutes - a.$2.lateMinutes);
     final in14 = ymd(store.now.add(const Duration(days: 14)));
     final upcoming = store.requests
         .where((r) =>
@@ -82,8 +87,9 @@ class AdminHome extends StatelessWidget {
           Figure(
             label: 'Lewat',
             value: '$late',
-            note: 'selepas ${store.settings.startTime}',
-            onTap: () => _openAttendance(context),
+            note: 'hari ini · ringkasan bulan',
+            onTap: () =>
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AttendanceSummaryScreen())),
           ),
           Figure(label: 'Bercuti', value: '${leaveToday.length}', note: 'hari ini'),
           Figure(
@@ -108,6 +114,31 @@ class AdminHome extends StatelessWidget {
                 ]),
         ),
         const ColumnBreak(),
+        if (lateBoard.isNotEmpty)
+          Section(
+            title: 'Lewat bulan ini',
+            action: TextAction('Ringkasan',
+                onPressed: () =>
+                    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AttendanceSummaryScreen()))),
+            child: Column(children: [
+              for (final (e, sum) in lateBoard.take(3))
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(children: [
+                    Avatar(e),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(e.name, style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                        Text('jumlah ${fmtMinutes(sum.lateMinutes)} lewat',
+                            style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                      ]),
+                    ),
+                    Tag('${sum.late} hari', tone: sum.late >= 3 ? 'bad' : 'warn'),
+                  ]),
+                ),
+            ]),
+          ),
         if (reminders.isNotEmpty)
           Section(
             title: 'Peringatan',

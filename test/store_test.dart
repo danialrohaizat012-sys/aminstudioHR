@@ -207,4 +207,49 @@ void main() {
     final s = make();
     expect(s.employeeById('e2')!.birthDate, DateTime(1997, 8, 22));
   });
+
+  group('attendance detail', () {
+    test('breaks are subtracted from hours worked and closed at punch out', () async {
+      var t = DateTime(2026, 11, 18, 9, 30);
+      final s = HrStore(clock: () => t)..seedForTest();
+      s.settings.requireSelfie = false;
+      await s.signInForTest('e2');
+      await s.punchIn(lat: 6.118, lng: 102.242, address: 'Jalan Kuala Krai', device: 'Pixel 7');
+      t = DateTime(2026, 11, 18, 13, 0);
+      expect(await s.startBreak('Rehat makan'), isNull);
+      expect(await s.startBreak('Solat'), isNotNull); // one break at a time
+      t = DateTime(2026, 11, 18, 14, 0);
+      expect(await s.endBreak(), isNull);
+      t = DateTime(2026, 11, 18, 15, 0);
+      await s.startBreak('Solat');
+      t = DateTime(2026, 11, 18, 17, 30); // leaves early, still on break
+      await s.punchOut(lat: 6.118, lng: 102.242);
+      final rec = s.attendanceOn('e2', '2026-11-18')!;
+      expect(rec.breaks.map((b) => b.end), ['14:00', '17:30']);
+      expect(s.workedMinutes(rec), 8 * 60 - 60 - 150); // 09:30–17:30 less 1h and 2h30
+      expect(s.lateMinutes(rec), 30);
+      expect(s.isEarlyLeave(rec), isTrue);
+      expect(rec.inMark!.address, 'Jalan Kuala Krai');
+      expect(rec.inMark!.device, 'Pixel 7');
+      expect(rec.inMark!.mapUrl, contains('6.118,102.242'));
+    });
+
+    test('monthly summary counts late days, minutes and absences', () async {
+      final s = HrStore(clock: () => DateTime(2026, 11, 30, 20, 0))..seedForTest();
+      s.attendance.clear();
+      void day(String d, String inT, String outT) =>
+          s.attendance['e3_$d'] = AttendanceRecord(empId: 'e3', date: d, clockIn: inT, clockOut: outT);
+      day('2026-11-02', '09:20', '18:00'); // late 20
+      day('2026-11-03', '08:55', '18:00');
+      day('2026-11-04', '09:05', '17:00'); // late 5, early leave
+      final sum = s.monthSummary(s.employeeById('e3')!, '2026-11');
+      expect(sum.late, 2);
+      expect(sum.lateMinutes, 25);
+      expect(sum.lateDays, ['2026-11-02', '2026-11-04']);
+      expect(sum.present, 3);
+      expect(sum.earlyLeave, 1);
+      expect(sum.absent, greaterThan(15)); // the other working days of November
+      expect(sum.absentDays, isNot(contains('2026-11-06'))); // Friday is a closed day
+    });
+  });
 }

@@ -24,6 +24,7 @@ class PunchScreen extends StatefulWidget {
 
 class _PunchScreenState extends State<PunchScreen> {
   LocationFix? fix;
+  String? address, device;
   bool locating = true;
   String? photo;
   bool saving = false;
@@ -33,6 +34,7 @@ class _PunchScreenState extends State<PunchScreen> {
   @override
   void initState() {
     super.initState();
+    punchDevices.deviceName().then((d) => device = d);
     _locate();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
   }
@@ -51,7 +53,12 @@ class _PunchScreenState extends State<PunchScreen> {
     setState(() {
       fix = f;
       locating = false;
+      address = null;
     });
+    if (f.ok && !f.mocked) {
+      final a = await punchDevices.address(f.lat!, f.lng!);
+      if (mounted) setState(() => address = a);
+    }
   }
 
   Future<void> _selfie() async {
@@ -111,6 +118,7 @@ class _PunchScreenState extends State<PunchScreen> {
                 locating: locating,
                 fix: fix,
                 distance: distance,
+                address: address,
                 onRetry: _locate,
               ),
               if (s.requireSelfie) ...[
@@ -215,14 +223,18 @@ class _PunchScreenState extends State<PunchScreen> {
             accuracy: f?.accuracy,
             photo: photo,
             note: reason,
-            mocked: f?.mocked ?? false)
+            mocked: f?.mocked ?? false,
+            address: address,
+            device: device)
         : await store.punchOut(
             lat: f?.lat,
             lng: f?.lng,
             accuracy: f?.accuracy,
             photo: photo,
             note: reason,
-            mocked: f?.mocked ?? false);
+            mocked: f?.mocked ?? false,
+            address: address,
+            device: device);
     if (error != null) {
       if (mounted) setState(() => saving = false);
       messenger.showSnackBar(SnackBar(content: Text(error)));
@@ -242,11 +254,13 @@ class _LocationCard extends StatelessWidget {
       {required this.locating,
       required this.fix,
       required this.distance,
-      required this.onRetry});
+      required this.onRetry,
+      this.address});
   final bool locating;
   final LocationFix? fix;
   final double? distance;
   final VoidCallback onRetry;
+  final String? address;
 
   @override
   Widget build(BuildContext context) {
@@ -317,6 +331,11 @@ class _LocationCard extends StatelessWidget {
                     Text(detail,
                         style:
                             t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                    if (address != null && !locating)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(address!, style: t.bodySmall),
+                      ),
                   ]),
             ),
             if (!locating && (fix == null || !fix!.ok || fix!.mocked))

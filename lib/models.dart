@@ -238,7 +238,18 @@ class HrRequest {
 
 /// One side of a punch: where and how it was made.
 class PunchMark {
-  PunchMark({required this.time, this.lat, this.lng, this.accuracy, this.distance, this.photo, this.note = '', this.mocked = false});
+  PunchMark({
+    required this.time,
+    this.lat,
+    this.lng,
+    this.accuracy,
+    this.distance,
+    this.photo,
+    this.note = '',
+    this.mocked = false,
+    this.address,
+    this.device,
+  });
 
   final String time; // HH:mm
   final double? lat, lng, accuracy; // accuracy in metres
@@ -246,6 +257,11 @@ class PunchMark {
   final String? photo; // base64 JPEG selfie
   final String note; // reason given when punching outside the area
   final bool mocked; // the device reported a mock (fake GPS) location
+  final String? address; // street address looked up from lat/lng, when available
+  final String? device; // phone model or browser used for the punch
+
+  /// Google Maps link for the punch location.
+  String? get mapUrl => hasLocation ? 'https://www.google.com/maps/search/?api=1&query=$lat,$lng' : null;
 
   bool get hasLocation => lat != null && lng != null;
 
@@ -258,6 +274,8 @@ class PunchMark {
         'photo': photo,
         'note': note,
         'mocked': mocked,
+        'address': address,
+        'device': device,
       };
 
   factory PunchMark.fromJson(Map<String, dynamic> j) => PunchMark(
@@ -269,8 +287,24 @@ class PunchMark {
         photo: j['photo'],
         note: j['note'] ?? '',
         mocked: j['mocked'] ?? false,
+        address: j['address'],
+        device: j['device'],
       );
 }
+
+/// A break during the working day (meal, prayers).
+class BreakSession {
+  BreakSession({required this.label, required this.start, this.end});
+  final String label;
+  final String start; // HH:mm
+  String? end; // null while the break is still running
+
+  Map<String, dynamic> toJson() => {'label': label, 'start': start, 'end': end};
+  factory BreakSession.fromJson(Map<String, dynamic> j) =>
+      BreakSession(label: j['label'] ?? 'Rehat', start: j['start'], end: j['end']);
+}
+
+const breakLabels = ['Rehat makan', 'Solat', 'Rehat makan & solat', 'Rehat lain'];
 
 class AttendanceRecord {
   AttendanceRecord({
@@ -281,13 +315,17 @@ class AttendanceRecord {
     this.inMark,
     this.outMark,
     this.editedBy,
-  });
+    List<BreakSession>? breaks,
+  }) : breaks = breaks ?? [];
 
   final String empId;
   final String date; // yyyy-mm-dd
   String? clockIn, clockOut; // HH:mm
   PunchMark? inMark, outMark; // null for records entered by HR
   String? editedBy; // set when HR corrected the times
+  final List<BreakSession> breaks;
+
+  BreakSession? get openBreak => breaks.where((b) => b.end == null).firstOrNull;
 
   String get key => '${empId}_$date';
 
@@ -299,6 +337,7 @@ class AttendanceRecord {
         'inMark': inMark?.toJson(),
         'outMark': outMark?.toJson(),
         'editedBy': editedBy,
+        'breaks': breaks.map((b) => b.toJson()).toList(),
       };
 
   factory AttendanceRecord.fromJson(Map<String, dynamic> j) => AttendanceRecord(
@@ -309,6 +348,9 @@ class AttendanceRecord {
         inMark: j['inMark'] == null ? null : PunchMark.fromJson(Map<String, dynamic>.from(j['inMark'])),
         outMark: j['outMark'] == null ? null : PunchMark.fromJson(Map<String, dynamic>.from(j['outMark'])),
         editedBy: j['editedBy'],
+        breaks: (j['breaks'] as List? ?? [])
+            .map((b) => BreakSession.fromJson(Map<String, dynamic>.from(b)))
+            .toList(),
       );
 }
 
@@ -456,6 +498,7 @@ class CompanySettings {
   CompanySettings({
     this.name = 'Amin Photo Studio',
     this.startTime = '09:00',
+    this.endTime = '18:00',
     List<int>? weekendDays,
     List<String>? holidays,
     this.officeLat,
@@ -468,6 +511,7 @@ class CompanySettings {
 
   String name;
   String startTime; // HH:mm, punch after this is late
+  String endTime; // HH:mm, punch out before this is an early leave
   List<int> weekendDays; // DateTime.monday (1) .. DateTime.sunday (7); the shop closes on Friday
   List<String> holidays; // yyyy-mm-dd
 
@@ -483,6 +527,7 @@ class CompanySettings {
   Map<String, dynamic> toJson() => {
         'name': name,
         'startTime': startTime,
+        'endTime': endTime,
         'weekendDays': weekendDays,
         'holidays': holidays,
         'officeLat': officeLat,
@@ -495,6 +540,7 @@ class CompanySettings {
   factory CompanySettings.fromJson(Map<String, dynamic> j) => CompanySettings(
         name: j['name'] ?? '',
         startTime: j['startTime'] ?? '09:00',
+        endTime: j['endTime'] ?? '18:00',
         weekendDays: j['weekendDays'] != null
             ? List<int>.from(j['weekendDays'])
             : j['weekendFriSat'] == true

@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 /// Result of asking the device where it is.
@@ -24,6 +27,12 @@ abstract class PunchDevices {
 
   /// A photo of a claim receipt as base64 JPEG, or null if cancelled.
   Future<String?> receipt();
+
+  /// Street address for a coordinate, or null when the lookup fails.
+  Future<String?> address(double lat, double lng);
+
+  /// Phone model (or browser on the web), e.g. "iPhone 14 Plus".
+  Future<String?> deviceName();
 }
 
 PunchDevices punchDevices = DevicePunchDevices();
@@ -81,5 +90,55 @@ class DevicePunchDevices implements PunchDevices {
     final file = await ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 1200, imageQuality: 70);
     if (file == null) return null;
     return base64Encode(await file.readAsBytes());
+  }
+
+  // OpenStreetMap Nominatim: free, max 1 request per second, which suits one
+  // lookup per punch for a small shop. Use a paid geocoder at larger scale.
+  @override
+  Future<String?> address(double lat, double lng) async {
+    try {
+      final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
+        'format': 'jsonv2',
+        'lat': '$lat',
+        'lon': '$lng',
+        'zoom': '18',
+        'accept-language': 'ms,en',
+      });
+      final res = await http
+          .get(uri, headers: kIsWeb ? const {} : const {'User-Agent': 'AminStudioHR/1.0'})
+          .timeout(const Duration(seconds: 6));
+      if (res.statusCode != 200) return null;
+      final name = (jsonDecode(res.body) as Map)['display_name'] as String?;
+      if (name == null) return null;
+      // Drop the trailing country for a shorter line.
+      return name.replaceAll(RegExp(r',\s*Malaysia\s*$'), '');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<String?> deviceName() async {
+    try {
+      final info = DeviceInfoPlugin();
+      if (kIsWeb) {
+        final w = await info.webBrowserInfo;
+        final browser = w.browserName.name;
+        final os = w.platform ?? '';
+        return '${browser[0].toUpperCase()}${browser.substring(1)} · $os';
+      }
+      switch (defaultTargetPlatform) {
+        case TargetPlatform.android:
+          final a = await info.androidInfo;
+          return '${a.manufacturer} ${a.model}';
+        case TargetPlatform.iOS:
+          final i = await info.iosInfo;
+          return i.modelName;
+        default:
+          return null;
+      }
+    } catch (_) {
+      return null;
+    }
   }
 }
