@@ -74,8 +74,7 @@ class HrStore extends ChangeNotifier {
 
   bool isWorkday(DateTime d) {
     final wd = d.weekday; // Mon=1 .. Sun=7
-    final weekend = settings.weekendFriSat ? const [5, 6] : const [6, 7];
-    return !weekend.contains(wd) && !settings.holidays.contains(ymd(d));
+    return !settings.weekendDays.contains(wd) && !settings.holidays.contains(ymd(d));
   }
 
   double workdays(String from, String to) {
@@ -227,17 +226,104 @@ class HrStore extends ChangeNotifier {
   // ---------------------------------------------------------------- actions
   String _id() => '${now.microsecondsSinceEpoch}${math.Random().nextInt(999)}';
 
-  Future<void> punchIn() async {
+  /// Metres from the office, or null when either point is unknown.
+  double? distanceToOffice(double? lat, double? lng) {
+    if (lat == null || lng == null || !settings.hasOffice) return null;
+    return haversineM(lat, lng, settings.officeLat!, settings.officeLng!);
+  }
+
+  /// Whether a punch at this distance needs a reason (and is flagged for HR).
+  bool outsideArea(double? distance) =>
+      settings.requireLocation && settings.hasOffice && (distance == null || distance > settings.radiusM);
+
+  bool isFlagged(PunchMark? m) => m != null && m.note.isNotEmpty;
+
+  PunchMark _mark({double? lat, double? lng, double? accuracy, String? photo, String note = ''}) => PunchMark(
+        time: hm(now),
+        lat: lat,
+        lng: lng,
+        accuracy: accuracy,
+        distance: distanceToOffice(lat, lng),
+        photo: photo,
+        note: note,
+      );
+
+  /// Why a punch cannot be recorded, or null when it can. Location is always
+  /// required: a punch is refused while the phone's location is off.
+  String? punchBlocker({double? lat, double? lng, String? photo, String note = ''}) {
+    if (lat == null || lng == null) {
+      return 'Lokasi telefon perlu dihidupkan untuk punch.';
+    }
+    if (settings.requireSelfie && (photo == null || photo.isEmpty)) {
+      return 'Selfie wajib sebagai bukti punch.';
+    }
+    if (outsideArea(distanceToOffice(lat, lng)) && note.trim().isEmpty) {
+      return 'Nyatakan sebab punch di luar kawasan kedai.';
+    }
+    return null;
+  }
+
+  /// Returns null on success, or the reason the punch was refused.
+  Future<String?> punchIn({double? lat, double? lng, double? accuracy, String? photo, String note = ''}) async {
     final e = me!;
     final d = ymd(now);
-    attendance['${e.id}_$d'] = AttendanceRecord(empId: e.id, date: d, clockIn: hm(now));
+    if (attendanceOn(e.id, d)?.clockIn != null) return 'Anda sudah punch masuk hari ini.';
+    final blocked = punchBlocker(lat: lat, lng: lng, photo: photo, note: note);
+    if (blocked != null) return blocked;
+    attendance['${e.id}_$d'] = AttendanceRecord(
+      empId: e.id,
+      date: d,
+      clockIn: hm(now),
+      inMark: _mark(lat: lat, lng: lng, accuracy: accuracy, photo: photo, note: note),
+    );
+    await _commit();
+    return null;
+  }
+
+  /// Returns null on success, or the reason the punch was refused.
+  Future<String?> punchOut({double? lat, double? lng, double? accuracy, String? photo, String note = ''}) async {
+    final rec = attendanceOn(me!.id, ymd(now));
+    if (rec == null || rec.clockIn == null) return 'Punch masuk dahulu.';
+    if (rec.clockOut != null) return 'Anda sudah punch keluar hari ini.';
+    final blocked = punchBlocker(lat: lat, lng: lng, photo: photo, note: note);
+    if (blocked != null) return blocked;
+    rec.clockOut = hm(now);
+    rec.outMark = _mark(lat: lat, lng: lng, accuracy: accuracy, photo: photo, note: note);
+    await _commit();
+    return null;
+  }
+
+  /// HR correction of a day's times. Clearing both removes the record.
+  Future<void> correctAttendance(String empId, String date, String? clockIn, String? clockOut) async {
+    if (!isAdmin) return;
+    final key = '${empId}_$date';
+    if (clockIn == null && clockOut == null) {
+      attendance.remove(key);
+    } else {
+      final rec = attendance[key] ?? AttendanceRecord(empId: empId, date: date);
+      rec.clockIn = clockIn;
+      rec.clockOut = clockOut;
+      rec.editedBy = me!.name;
+      attendance[key] = rec;
+    }
     await _commit();
   }
 
-  Future<void> punchOut() async {
-    final rec = attendanceOn(me!.id, ymd(now));
-    if (rec == null) return;
-    rec.clockOut = hm(now);
+  /// Status of one employee on one day, for the HR attendance board.
+  DayStatus dayStatus(Employee e, String date) {
+    final rec = attendanceOn(e.id, date);
+    if (rec?.clockIn != null) {
+      return isLate(rec!) ? DayStatus.late : DayStatus.present;
+    }
+    if (onLeave(date).any((r) => r.empId == e.id)) return DayStatus.onLeave;
+    if (!isWorkday(parseYmd(date))) return DayStatus.restDay;
+    if (date.compareTo(ymd(now)) > 0) return DayStatus.upcoming;
+    return DayStatus.absent;
+  }
+
+  Future<void> setOffice(double lat, double lng) async {
+    settings.officeLat = lat;
+    settings.officeLng = lng;
     await _commit();
   }
 
@@ -506,6 +592,35 @@ class HrStore extends ChangeNotifier {
     ];
     settings = CompanySettings();
   }
+}
+
+enum DayStatus { present, late, onLeave, absent, restDay, upcoming }
+
+extension DayStatusLabel on DayStatus {
+  String get label => switch (this) {
+        DayStatus.present => 'Hadir',
+        DayStatus.late => 'Lewat',
+        DayStatus.onLeave => 'Bercuti',
+        DayStatus.absent => 'Tiada rekod',
+        DayStatus.restDay => 'Hari rehat',
+        DayStatus.upcoming => '—',
+      };
+  String get tone => switch (this) {
+        DayStatus.present => 'ok',
+        DayStatus.late => 'warn',
+        DayStatus.absent => 'bad',
+        _ => 'mute',
+      };
+}
+
+/// Great-circle distance in metres.
+double haversineM(double lat1, double lng1, double lat2, double lng2) {
+  const r = 6371000.0;
+  double rad(double d) => d * math.pi / 180;
+  final dLat = rad(lat2 - lat1), dLng = rad(lng2 - lng1);
+  final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+      math.cos(rad(lat1)) * math.cos(rad(lat2)) * math.sin(dLng / 2) * math.sin(dLng / 2);
+  return 2 * r * math.asin(math.sqrt(a));
 }
 
 /// Makes the store available to every widget below it and rebuilds them

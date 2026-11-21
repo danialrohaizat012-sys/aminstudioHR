@@ -4,6 +4,7 @@ import '../format.dart';
 import '../store.dart';
 import '../widgets/common.dart';
 import 'announcements_screen.dart';
+import 'punch_settings_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -59,7 +60,7 @@ class ProfileScreen extends StatelessWidget {
                 leading: const Icon(Icons.tune),
                 title: const Text('Tetapan syarikat'),
                 subtitle: Text('Waktu mula ${store.settings.startTime} · '
-                    '${store.settings.weekendFriSat ? 'Jumaat & Sabtu' : 'Sabtu & Ahad'}'),
+                    '${store.settings.hasOffice ? 'radius ${store.settings.radiusM.round()} m' : 'lokasi kedai belum ditetapkan'}'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
               ),
@@ -86,8 +87,10 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController name;
   late TimeOfDay start;
-  late bool friSat;
+  late Set<int> weekend;
   bool _ready = false;
+
+  static const _dayNames = ['Isn', 'Sel', 'Rab', 'Kha', 'Jum', 'Sab', 'Ahd'];
 
   @override
   void didChangeDependencies() {
@@ -98,7 +101,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     name = TextEditingController(text: s.name);
     final p = s.startTime.split(':');
     start = TimeOfDay(hour: int.parse(p[0]), minute: int.parse(p[1]));
-    friSat = s.weekendFriSat;
+    weekend = {...s.weekendDays};
   }
 
   @override
@@ -107,16 +110,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
+
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
+    final s = store.settings;
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    Widget heading(String x) => Padding(
+          padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+          child: Text(x, style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+        );
+
     return Scaffold(
       appBar: AppBar(title: const Text('Tetapan syarikat')),
       body: PageList(children: [
         TextField(controller: name, decoration: const InputDecoration(labelText: 'Nama syarikat')),
+        heading('Waktu kerja'),
         Card(
           clipBehavior: Clip.antiAlias,
-          child: Column(children: [
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             ListTile(
               title: const Text('Waktu mula kerja'),
               subtitle: const Text('Punch masuk selepas waktu ini ditanda lewat'),
@@ -127,23 +140,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
             const Divider(),
-            SwitchListTile(
-              value: friSat,
-              onChanged: (v) => setState(() => friSat = v),
-              title: const Text('Hujung minggu Jumaat & Sabtu'),
-              subtitle: const Text('Untuk Kelantan dan Terengganu'),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Hari tutup', style: t.bodyLarge),
+                Text('Tidak dikira sebagai hari bekerja untuk cuti dan kehadiran', style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                const SizedBox(height: 10),
+                Wrap(spacing: 6, runSpacing: 6, children: [
+                  for (var d = 1; d <= 7; d++)
+                    FilterChip(
+                      label: Text(_dayNames[d - 1]),
+                      selected: weekend.contains(d),
+                      onSelected: (v) => setState(() => v ? weekend.add(d) : weekend.remove(d)),
+                    ),
+                ]),
+              ]),
             ),
           ]),
+        ),
+        heading('Punch masuk'),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(
+            leading: const Icon(Icons.where_to_vote_outlined),
+            title: const Text('Tetapan punch'),
+            subtitle: Text(s.hasOffice
+                ? 'Radius ${s.radiusM.round()} m${s.requireSelfie ? ' · selfie wajib' : ''}'
+                : 'Lokasi kedai belum ditetapkan'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PunchSettingsScreen())),
+          ),
         ),
         FilledButton(
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
           onPressed: () async {
-            final s = store.settings
+            final st = store.settings
               ..name = name.text.trim()
               ..startTime = '${two(start.hour)}:${two(start.minute)}'
-              ..weekendFriSat = friSat;
+              ..weekendDays = (weekend.toList()..sort());
             final nav = Navigator.of(context);
-            await store.updateSettings(s);
+            await store.updateSettings(st);
             nav.pop();
           },
           child: const Text('Simpan'),

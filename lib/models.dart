@@ -204,28 +204,76 @@ class HrRequest {
       );
 }
 
+/// One side of a punch: where and how it was made.
+class PunchMark {
+  PunchMark({required this.time, this.lat, this.lng, this.accuracy, this.distance, this.photo, this.note = ''});
+
+  final String time; // HH:mm
+  final double? lat, lng, accuracy; // accuracy in metres
+  final double? distance; // metres from the office, when both are known
+  final String? photo; // base64 JPEG selfie
+  final String note; // reason given when punching outside the area
+
+  bool get hasLocation => lat != null && lng != null;
+
+  Map<String, dynamic> toJson() => {
+        'time': time,
+        'lat': lat,
+        'lng': lng,
+        'accuracy': accuracy,
+        'distance': distance,
+        'photo': photo,
+        'note': note,
+      };
+
+  factory PunchMark.fromJson(Map<String, dynamic> j) => PunchMark(
+        time: j['time'],
+        lat: (j['lat'] as num?)?.toDouble(),
+        lng: (j['lng'] as num?)?.toDouble(),
+        accuracy: (j['accuracy'] as num?)?.toDouble(),
+        distance: (j['distance'] as num?)?.toDouble(),
+        photo: j['photo'],
+        note: j['note'] ?? '',
+      );
+}
+
 class AttendanceRecord {
   AttendanceRecord({
     required this.empId,
     required this.date,
     this.clockIn,
     this.clockOut,
+    this.inMark,
+    this.outMark,
+    this.editedBy,
   });
 
   final String empId;
   final String date; // yyyy-mm-dd
   String? clockIn, clockOut; // HH:mm
+  PunchMark? inMark, outMark; // null for records entered by HR
+  String? editedBy; // set when HR corrected the times
 
   String get key => '${empId}_$date';
 
-  Map<String, dynamic> toJson() =>
-      {'empId': empId, 'date': date, 'in': clockIn, 'out': clockOut};
+  Map<String, dynamic> toJson() => {
+        'empId': empId,
+        'date': date,
+        'in': clockIn,
+        'out': clockOut,
+        'inMark': inMark?.toJson(),
+        'outMark': outMark?.toJson(),
+        'editedBy': editedBy,
+      };
 
   factory AttendanceRecord.fromJson(Map<String, dynamic> j) => AttendanceRecord(
         empId: j['empId'],
         date: j['date'],
         clockIn: j['in'],
         clockOut: j['out'],
+        inMark: j['inMark'] == null ? null : PunchMark.fromJson(Map<String, dynamic>.from(j['inMark'])),
+        outMark: j['outMark'] == null ? null : PunchMark.fromJson(Map<String, dynamic>.from(j['outMark'])),
+        editedBy: j['editedBy'],
       );
 }
 
@@ -373,26 +421,57 @@ class CompanySettings {
   CompanySettings({
     this.name = 'Amin Photo Studio',
     this.startTime = '09:00',
-    this.weekendFriSat = false,
+    List<int>? weekendDays,
     List<String>? holidays,
-  }) : holidays = holidays ?? [];
+    this.officeLat,
+    this.officeLng,
+    this.radiusM = 150,
+    this.requireLocation = true,
+    this.requireSelfie = true,
+  })  : holidays = holidays ?? [],
+        weekendDays = weekendDays ?? [DateTime.friday];
 
   String name;
   String startTime; // HH:mm, punch after this is late
-  bool weekendFriSat; // Kelantan / Terengganu
+  List<int> weekendDays; // DateTime.monday (1) .. DateTime.sunday (7); the shop closes on Friday
   List<String> holidays; // yyyy-mm-dd
+
+  // Punch rules. The area check only applies once HR has set the office
+  // location (Profil > Tetapan syarikat > Guna lokasi semasa).
+  double? officeLat, officeLng;
+  double radiusM;
+  bool requireLocation; // outside the radius needs a reason and is flagged
+  bool requireSelfie; // photo proof on every punch (on by default)
+
+  bool get hasOffice => officeLat != null && officeLng != null;
 
   Map<String, dynamic> toJson() => {
         'name': name,
         'startTime': startTime,
-        'weekendFriSat': weekendFriSat,
+        'weekendDays': weekendDays,
         'holidays': holidays,
+        'officeLat': officeLat,
+        'officeLng': officeLng,
+        'radiusM': radiusM,
+        'requireLocation': requireLocation,
+        'requireSelfie': requireSelfie,
       };
 
   factory CompanySettings.fromJson(Map<String, dynamic> j) => CompanySettings(
         name: j['name'] ?? '',
         startTime: j['startTime'] ?? '09:00',
-        weekendFriSat: j['weekendFriSat'] ?? false,
+        weekendDays: j['weekendDays'] != null
+            ? List<int>.from(j['weekendDays'])
+            : j['weekendFriSat'] == true
+                ? [DateTime.friday, DateTime.saturday]
+                : j['weekendFriSat'] == false
+                    ? [DateTime.saturday, DateTime.sunday]
+                    : null,
         holidays: List<String>.from(j['holidays'] ?? const []),
+        officeLat: (j['officeLat'] as num?)?.toDouble(),
+        officeLng: (j['officeLng'] as num?)?.toDouble(),
+        radiusM: (j['radiusM'] as num?)?.toDouble() ?? 150,
+        requireLocation: j['requireLocation'] ?? true,
+        requireSelfie: j['requireSelfie'] ?? true,
       );
 }

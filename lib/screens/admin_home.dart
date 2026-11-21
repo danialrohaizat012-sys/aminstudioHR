@@ -5,6 +5,10 @@ import '../store.dart';
 import '../widgets/brand.dart';
 import '../widgets/common.dart';
 import 'announcements_screen.dart';
+import 'attendance_admin_screen.dart';
+import 'employee_home.dart';
+import 'punch_screen.dart';
+import 'punch_settings_screen.dart';
 
 /// HR manager's day: who is in, what needs a decision, payroll status.
 class AdminHome extends StatelessWidget {
@@ -53,13 +57,20 @@ class AdminHome extends StatelessWidget {
         ],
       ),
       body: PageList(children: [
+        if (store.me!.salary > 0) const PunchCard(),
         FigureStrip(items: [
           Figure(
             label: 'Hadir',
             value: '${present.length} / ${staff.length}',
             progress: staff.isEmpty ? 0 : present.length / staff.length,
+            onTap: () => _openAttendance(context),
           ),
-          Figure(label: 'Lewat', value: '$late', note: 'selepas ${store.settings.startTime}'),
+          Figure(
+            label: 'Lewat',
+            value: '$late',
+            note: 'selepas ${store.settings.startTime}',
+            onTap: () => _openAttendance(context),
+          ),
           Figure(label: 'Bercuti', value: '${leaveToday.length}', note: 'hari ini'),
           Figure(
             label: 'Menunggu kelulusan',
@@ -68,6 +79,8 @@ class AdminHome extends StatelessWidget {
             onTap: () => onGo(1),
           ),
         ]),
+        // Until the shop location is set, punch rules sit near the top.
+        if (!store.settings.hasOffice) _PunchRulesCard(),
         Section(
           title: 'Menunggu kelulusan',
           action: pending.length > 3 ? TextAction('Semua (${pending.length})', onPressed: () => onGo(1)) : null,
@@ -82,6 +95,7 @@ class AdminHome extends StatelessWidget {
         ),
         Section(
           title: workday ? 'Belum punch masuk' : 'Kehadiran',
+          action: TextAction('Kehadiran penuh', onPressed: () => _openAttendance(context)),
           child: !workday
               ? const QuietText('Hari ini hari rehat.')
               : missing.isEmpty
@@ -119,6 +133,7 @@ class AdminHome extends StatelessWidget {
                 ),
             ]),
           ),
+        if (store.settings.hasOffice) _PunchRulesCard(),
         Section(
           title: 'Gaji ${monthLabel(month)}',
           action: Tag(run == null ? 'Draf' : 'Dimuktamadkan', tone: run == null ? 'warn' : 'ok'),
@@ -131,6 +146,45 @@ class AdminHome extends StatelessWidget {
                 : OutlinedButton(onPressed: () => onGo(3), child: const Text('Lihat penggajian')),
           ]),
         ),
+      ]),
+    );
+  }
+
+  void _openAttendance(BuildContext context) =>
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AttendanceAdminScreen()));
+}
+
+/// Punch rules at a glance, with a shortcut to change them.
+class _PunchRulesCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final s = store.settings;
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    Widget row(IconData icon, String label, String value, {String tone = 'mute'}) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(children: [
+            Icon(icon, size: 20, color: cs.onSurfaceVariant),
+            const SizedBox(width: 12),
+            Expanded(child: Text(label, style: t.bodyMedium)),
+            Tag(value, tone: tone),
+          ]),
+        );
+    void open() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PunchSettingsScreen()));
+    return Section(
+      title: 'Tetapan punch',
+      action: TextAction('Ubah', onPressed: open),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        row(Icons.storefront_outlined, 'Lokasi kedai', s.hasOffice ? 'Ditetapkan' : 'Belum ditetapkan',
+            tone: s.hasOffice ? 'ok' : 'warn'),
+        row(Icons.radar_outlined, 'Radius', fmtDistance(s.radiusM)),
+        row(Icons.face_outlined, 'Selfie', s.requireSelfie ? 'Wajib' : 'Tidak wajib', tone: s.requireSelfie ? 'ok' : 'mute'),
+        row(Icons.location_on_outlined, 'Lokasi telefon', 'Wajib', tone: 'ok'),
+        if (!s.hasOffice) ...[
+          const SizedBox(height: 8),
+          FilledButton.tonal(onPressed: open, child: const Text('Tetapkan lokasi kedai')),
+        ],
       ]),
     );
   }

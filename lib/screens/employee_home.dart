@@ -10,6 +10,7 @@ import '../widgets/brand.dart';
 import '../widgets/common.dart';
 import 'announcements_screen.dart';
 import 'payslips_screen.dart';
+import 'punch_screen.dart';
 import 'request_forms.dart';
 
 class EmployeeHome extends StatelessWidget {
@@ -242,13 +243,19 @@ class _PunchCardState extends State<PunchCard> {
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
-            Text(hm(now),
-                style: t.displaySmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -1.5, height: 1)),
-            const SizedBox(width: 20),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(hm(now),
+                    style: t.displaySmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -1.5, height: 1)),
+              ),
+            ),
+            const SizedBox(width: 16),
             Container(width: 1, height: 36, color: cs.outlineVariant),
-            const SizedBox(width: 20),
+            const SizedBox(width: 16),
             io('Masuk', rec?.clockIn),
-            const SizedBox(width: 24),
+            const SizedBox(width: 20),
             io('Keluar', rec?.clockOut),
           ]),
           const SizedBox(height: 10),
@@ -256,20 +263,24 @@ class _PunchCardState extends State<PunchCard> {
               style: t.bodyMedium?.copyWith(
                   color: late ? statusColors(context, 'warn').fg : cs.onSurfaceVariant,
                   fontWeight: late ? FontWeight.w600 : null)),
+          if (rec?.inMark?.distance != null || store.isFlagged(rec?.inMark) || store.isFlagged(rec?.outMark))
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Wrap(spacing: 6, runSpacing: 6, children: [
+                if (rec!.inMark?.distance != null)
+                  Tag('Masuk ${fmtDistance(rec.inMark!.distance!)} dari kedai',
+                      tone: store.isFlagged(rec.inMark) ? 'warn' : 'ok'),
+                if (rec.outMark?.distance != null)
+                  Tag('Keluar ${fmtDistance(rec.outMark!.distance!)} dari kedai',
+                      tone: store.isFlagged(rec.outMark) ? 'warn' : 'ok'),
+              ]),
+            ),
           if (button != null) ...[const SizedBox(height: 12), button],
         ]),
       ),
     );
   }
 
-  Future<void> _act(BuildContext context, bool clockIn) async {
-    final store = StoreScope.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-    if (clockIn) {
-      await store.punchIn();
-    } else {
-      await store.punchOut();
-    }
-    messenger.showSnackBar(SnackBar(content: Text('${clockIn ? 'Punch masuk' : 'Punch keluar'} ${hm(store.now)}')));
-  }
+  void _act(BuildContext context, bool clockIn) => Navigator.of(context)
+      .push(MaterialPageRoute(builder: (_) => PunchScreen(clockIn: clockIn), fullscreenDialog: true));
 }

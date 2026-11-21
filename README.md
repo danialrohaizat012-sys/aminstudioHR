@@ -7,7 +7,7 @@ Aplikasi mudah alih HR untuk SME Malaysia: kehadiran, cuti, tuntutan, lebih masa
 ```bash
 flutter pub get
 flutter run            # pilih telefon, emulator atau Chrome
-flutter test           # 9 ujian: kiraan caruman, baki cuti, kelulusan, gaji, log masuk
+flutter test           # 17 ujian: caruman, cuti, kelulusan, gaji, punch (lokasi, selfie, kawasan), log masuk
 ```
 
 ![Paparan pekerja](docs/screenshots/pekerja.png)
@@ -23,6 +23,16 @@ Skrin log masuk menyenaraikan akaun contoh:
 - **Aisyah, Arun, Hafiz, Mei Ling** (pekerja) nampak punch masuk, baki cuti, permohonan dan slip gaji.
 
 Data disimpan dalam peranti (`shared_preferences`). "Set semula data demo" di skrin log masuk memulihkan data contoh.
+
+## Punch masuk / keluar
+
+- **Lokasi telefon wajib.** Punch disekat jika lokasi (GPS) dimatikan atau kebenaran lokasi ditolak.
+- **Selfie wajib** secara lalai sebagai bukti; pengurus boleh matikan.
+- **Kawasan kedai.** Pengurus tetapkan lokasi kedai (guna lokasi semasa atau tampal koordinat dari Google Maps) dan radius 50 m hingga 1 km. Punch di luar radius perlu sebab dan ditanda untuk HR.
+- **Papan kehadiran pengurus:** status setiap pekerja ikut hari, jarak dari kedai, selfie, sebab luar kawasan, dan pembetulan masa oleh HR.
+- Tetapan ada di dashboard pengurus (kad "Tetapan punch") dan di Profil > Tetapan syarikat.
+
+Di web, lokasi memerlukan HTTPS (Vercel sudah HTTPS) dan selfie dibuka melalui kamera atau pemilih fail pelayar.
 
 ## Struktur
 

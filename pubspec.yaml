@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  geolocator: ^14.1.2
+  image_picker: ^1.2.4
   material_ui: ^1.11.1
   shared_preferences: ^2.3.2
 
