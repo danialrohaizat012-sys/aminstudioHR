@@ -31,7 +31,10 @@ class EmployeeHome extends StatelessWidget {
       appBar: AppBar(
         toolbarHeight: 72,
         leadingWidth: 64,
-        leading: const Padding(padding: EdgeInsets.only(left: 16), child: Center(child: BrandMark(size: 40))),
+        // On wide screens the navigation rail already shows the logo.
+        leading: MediaQuery.sizeOf(context).width < 840
+            ? const Padding(padding: EdgeInsets.only(left: 16), child: Center(child: BrandMark(size: 40)))
+            : null,
         titleSpacing: 12,
         title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Hai, ${me.firstName}', style: t.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
@@ -72,6 +75,7 @@ class EmployeeHome extends StatelessWidget {
             for (final type in const ['Cuti Tahunan', 'Cuti Sakit']) _BalanceRow(empId: me.id, type: type),
           ]),
         ),
+        const ColumnBreak(),
         Section(
           title: 'Slip gaji terakhir',
           action: slips.isEmpty ? null : TextAction('Semua', onPressed: () => onGo(3)),

@@ -323,20 +323,57 @@ class ApprovalTile extends StatelessWidget {
   }
 }
 
-/// Standard scrolling page body with consistent padding and spacing.
+/// Put one of these in a [PageList] to split it into two columns on wide
+/// screens. On phones it is ignored and the page stays a single column.
+class ColumnBreak extends StatelessWidget {
+  const ColumnBreak({super.key});
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
+}
+
+/// Standard scrolling page body. Content is centred and capped at
+/// [maxWidth] so it does not stretch across a desktop monitor; pages that
+/// include a [ColumnBreak] become two columns from 1000 px.
 class PageList extends StatelessWidget {
-  const PageList({super.key, required this.children, this.onRefresh});
+  const PageList({super.key, required this.children, this.onRefresh, this.maxWidth = 760});
   final List<Widget> children;
   final Future<void> Function()? onRefresh;
+  final double maxWidth;
+
+  static const gap = 12.0;
 
   @override
   Widget build(BuildContext context) {
-    final list = ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-      itemCount: children.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (_, i) => children[i],
-    );
-    return onRefresh == null ? list : RefreshIndicator(onRefresh: onRefresh!, child: list);
+    return LayoutBuilder(builder: (context, box) {
+      final breakAt = children.indexWhere((w) => w is ColumnBreak);
+      final twoCol = breakAt >= 0 && box.maxWidth >= 1000;
+      final cap = twoCol ? 1180.0 : maxWidth;
+      final side = ((box.maxWidth - cap) / 2).clamp(16.0, double.infinity);
+      final padding = EdgeInsets.fromLTRB(side, box.maxWidth >= 840 ? 16 : 8, side, 96);
+      final items = children.where((w) => w is! ColumnBreak).toList();
+
+      Widget column(List<Widget> ws) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < ws.length; i++) ...[if (i > 0) const SizedBox(height: gap), ws[i]],
+            ],
+          );
+
+      final Widget list = twoCol
+          ? ListView(padding: padding, children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(flex: 11, child: column(children.sublist(0, breakAt))),
+                const SizedBox(width: 16),
+                Expanded(flex: 9, child: column(children.sublist(breakAt + 1))),
+              ]),
+            ])
+          : ListView.separated(
+              padding: padding,
+              itemCount: items.length,
+              separatorBuilder: (_, __) => const SizedBox(height: gap),
+              itemBuilder: (_, i) => items[i],
+            );
+      return onRefresh == null ? list : RefreshIndicator(onRefresh: onRefresh!, child: list);
+    });
   }
 }

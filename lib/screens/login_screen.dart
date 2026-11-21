@@ -20,33 +20,43 @@ class LoginScreen extends StatelessWidget {
 
     return Scaffold(
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 40, 20, 24),
-          children: [
-            const BrandLockup(markSize: 56),
-            const SizedBox(height: 32),
-            Text('Log masuk sebagai', style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Text('Versi demo: pilih akaun dan masukkan PIN demo ${HrStore.demoPin}. Tukar PIN di Profil selepas log masuk.',
-                style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-            const SizedBox(height: 16),
-            _group(context, 'Pengurus HR', admins),
-            const SizedBox(height: 12),
-            _group(context, 'Pekerja', staff),
-            const SizedBox(height: 24),
-            Center(
-              child: TextButton(
-                onPressed: () async {
-                  await store.resetDemo();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(const SnackBar(content: Text('Data demo diset semula')));
-                  }
-                },
-                child: const Text('Set semula data demo'),
-              ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: ListView(
+              shrinkWrap: MediaQuery.sizeOf(context).height > 760,
+              padding: const EdgeInsets.fromLTRB(20, 40, 20, 24),
+              children: [
+                const BrandLockup(markSize: 56),
+                const SizedBox(height: 32),
+                Text('Log masuk sebagai',
+                    style:
+                        t.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text(
+                    'Versi demo: pilih akaun dan masukkan PIN demo ${HrStore.demoPin}. Tukar PIN di Profil selepas log masuk.',
+                    style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                const SizedBox(height: 16),
+                _group(context, 'Pengurus HR', admins),
+                const SizedBox(height: 12),
+                _group(context, 'Pekerja', staff),
+                const SizedBox(height: 24),
+                Center(
+                  child: TextButton(
+                    onPressed: () async {
+                      await store.resetDemo();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Data demo diset semula')));
+                      }
+                    },
+                    child: const Text('Set semula data demo'),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -66,7 +76,8 @@ class LoginScreen extends StatelessWidget {
         for (final e in employees)
           ListTile(
             leading: Avatar(e),
-            title: Text(e.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+            title: Text(e.name,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
             subtitle: Text('${e.position} · ${e.dept}'),
             trailing: store.needsPin(e.id)
                 ? const Tag('Cipta PIN')

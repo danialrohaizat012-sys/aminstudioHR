@@ -82,115 +82,122 @@ class _PunchScreenState extends State<PunchScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(action)),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        children: [
-          Center(
-            child: Column(children: [
-              Text('${two(now.hour)}:${two(now.minute)}',
-                  style: t.displayLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -3,
-                      height: 1)),
-              const SizedBox(height: 6),
-              Text(longDate(now),
-                  style: t.bodyLarge?.copyWith(color: cs.onSurfaceVariant)),
-              if (late)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Tag('Selepas waktu mula ${s.startTime}', tone: 'warn'),
-                ),
-            ]),
-          ),
-          const SizedBox(height: 24),
-          _LocationCard(
-            locating: locating,
-            fix: fix,
-            distance: distance,
-            onRetry: _locate,
-          ),
-          if (s.requireSelfie) ...[
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(children: [
-                  CircleAvatar(
-                    radius: 36,
-                    backgroundColor: cs.surfaceContainer,
-                    backgroundImage: photo == null
-                        ? null
-                        : MemoryImage(base64Decode(photo!)),
-                    child: photo == null
-                        ? Icon(Icons.face_outlined, color: cs.onSurfaceVariant)
-                        : null,
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Selfie',
-                              style: t.titleSmall
-                                  ?.copyWith(fontWeight: FontWeight.w700)),
-                          Text(
-                              photo == null
-                                  ? 'Wajib sebagai bukti punch'
-                                  : 'Gambar sedia. Akan disimpan bersama punch.',
-                              style: t.bodySmall
-                                  ?.copyWith(color: cs.onSurfaceVariant)),
-                        ]),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _selfie,
-                    icon: const Icon(Icons.photo_camera_outlined, size: 18),
-                    label: Text(photo == null ? 'Ambil' : 'Ambil semula'),
-                  ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            children: [
+              Center(
+                child: Column(children: [
+                  Text('${two(now.hour)}:${two(now.minute)}',
+                      style: t.displayLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -3,
+                          height: 1)),
+                  const SizedBox(height: 6),
+                  Text(longDate(now),
+                      style: t.bodyLarge?.copyWith(color: cs.onSurfaceVariant)),
+                  if (late)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Tag('Selepas waktu mula ${s.startTime}',
+                          tone: 'warn'),
+                    ),
                 ]),
               ),
-            ),
-          ],
-          if (needsReason) ...[
-            const SizedBox(height: 12),
-            TextField(
-              controller: note,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Sebab punch di luar kawasan',
-                hintText: 'Contoh: penggambaran perkahwinan di Pasir Mas',
-                helperText: 'Punch ini akan ditanda untuk semakan HR.',
+              const SizedBox(height: 24),
+              _LocationCard(
+                locating: locating,
+                fix: fix,
+                distance: distance,
+                onRetry: _locate,
               ),
-            ),
-          ],
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(56),
-                textStyle: t.titleMedium),
-            onPressed: ready ? () => _submit(store, distance) : null,
-            icon: Icon(widget.clockIn ? Icons.login : Icons.logout),
-            label: Text(saving ? 'Menyimpan…' : '$action sekarang'),
+              if (s.requireSelfie) ...[
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(children: [
+                      CircleAvatar(
+                        radius: 36,
+                        backgroundColor: cs.surfaceContainer,
+                        backgroundImage: photo == null
+                            ? null
+                            : MemoryImage(base64Decode(photo!)),
+                        child: photo == null
+                            ? Icon(Icons.face_outlined,
+                                color: cs.onSurfaceVariant)
+                            : null,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Selfie',
+                                  style: t.titleSmall
+                                      ?.copyWith(fontWeight: FontWeight.w700)),
+                              Text(
+                                  photo == null
+                                      ? 'Wajib sebagai bukti punch'
+                                      : 'Gambar sedia. Akan disimpan bersama punch.',
+                                  style: t.bodySmall
+                                      ?.copyWith(color: cs.onSurfaceVariant)),
+                            ]),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _selfie,
+                        icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                        label: Text(photo == null ? 'Ambil' : 'Ambil semula'),
+                      ),
+                    ]),
+                  ),
+                ),
+              ],
+              if (needsReason) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: note,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Sebab punch di luar kawasan',
+                    hintText: 'Contoh: penggambaran perkahwinan di Pasir Mas',
+                    helperText: 'Punch ini akan ditanda untuk semakan HR.',
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(56),
+                    textStyle: t.titleMedium),
+                onPressed: ready ? () => _submit(store, distance) : null,
+                icon: Icon(widget.clockIn ? Icons.login : Icons.logout),
+                label: Text(saving ? 'Menyimpan…' : '$action sekarang'),
+              ),
+              if (!ready && !locating && !saving)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    fix?.mocked == true
+                        ? 'Punch disekat kerana lokasi palsu dikesan.'
+                        : !hasLocation
+                            ? 'Punch tidak boleh dibuat selagi lokasi telefon dimatikan atau tidak dibenarkan.'
+                            : s.requireSelfie && photo == null
+                                ? 'Ambil selfie dahulu sebagai bukti.'
+                                : 'Nyatakan sebab punch di luar kawasan.',
+                    textAlign: TextAlign.center,
+                    style: t.bodySmall?.copyWith(
+                        color: !hasLocation
+                            ? statusColors(context, 'bad').fg
+                            : cs.onSurfaceVariant,
+                        fontWeight: !hasLocation ? FontWeight.w600 : null),
+                  ),
+                ),
+            ],
           ),
-          if (!ready && !locating && !saving)
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Text(
-                fix?.mocked == true
-                    ? 'Punch disekat kerana lokasi palsu dikesan.'
-                    : !hasLocation
-                        ? 'Punch tidak boleh dibuat selagi lokasi telefon dimatikan atau tidak dibenarkan.'
-                        : s.requireSelfie && photo == null
-                            ? 'Ambil selfie dahulu sebagai bukti.'
-                            : 'Nyatakan sebab punch di luar kawasan.',
-                textAlign: TextAlign.center,
-                style: t.bodySmall?.copyWith(
-                    color: !hasLocation
-                        ? statusColors(context, 'bad').fg
-                        : cs.onSurfaceVariant,
-                    fontWeight: !hasLocation ? FontWeight.w600 : null),
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }

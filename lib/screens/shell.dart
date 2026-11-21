@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 
 import '../store.dart';
+import '../widgets/brand.dart';
+import '../widgets/common.dart';
 import 'admin_home.dart';
 import 'approvals_screen.dart';
 import 'attendance_screen.dart';
@@ -80,70 +82,107 @@ class _ShellState extends State<Shell> {
             const ProfileScreen(),
           ];
 
-    final destinations = admin
-        ? [
-            const NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: 'Utama'),
-            NavigationDestination(
-              icon: Badge(
-                  isLabelVisible: pendingCount > 0,
-                  label: Text('$pendingCount'),
-                  child: const Icon(Icons.inbox_outlined)),
-              selectedIcon: Badge(
-                  isLabelVisible: pendingCount > 0,
-                  label: Text('$pendingCount'),
-                  child: const Icon(Icons.inbox)),
-              label: 'Kelulusan',
+    // (icon, selected icon, short label for the phone bar, full label for the
+    // desktop rail, badge count)
+    final items = admin
+        ? <(IconData, IconData, String, String, int)>[
+            (Icons.home_outlined, Icons.home, 'Utama', 'Utama', 0),
+            (
+              Icons.inbox_outlined,
+              Icons.inbox,
+              'Kelulusan',
+              'Kelulusan',
+              pendingCount
             ),
-            const NavigationDestination(
-                icon: Icon(Icons.people_outline),
-                selectedIcon: Icon(Icons.people),
-                label: 'Pekerja'),
-            const NavigationDestination(
-                icon: Icon(Icons.payments_outlined),
-                selectedIcon: Icon(Icons.payments),
-                label: 'Gaji'),
-            const NavigationDestination(
-                icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person),
-                label: 'Profil'),
+            (Icons.people_outline, Icons.people, 'Pekerja', 'Pekerja', 0),
+            (Icons.payments_outlined, Icons.payments, 'Gaji', 'Penggajian', 0),
+            (Icons.person_outline, Icons.person, 'Profil', 'Profil', 0),
           ]
-        : const [
-            NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: 'Utama'),
-            NavigationDestination(
-                icon: Icon(Icons.schedule_outlined),
-                selectedIcon: Icon(Icons.schedule),
-                label: 'Hadir'),
-            NavigationDestination(
-                icon: Icon(Icons.assignment_outlined),
-                selectedIcon: Icon(Icons.assignment),
-                label: 'Mohon'),
-            NavigationDestination(
-                icon: Icon(Icons.receipt_outlined),
-                selectedIcon: Icon(Icons.receipt),
-                label: 'Slip'),
-            NavigationDestination(
-                icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person),
-                label: 'Profil'),
+        : <(IconData, IconData, String, String, int)>[
+            (Icons.home_outlined, Icons.home, 'Utama', 'Utama', 0),
+            (Icons.schedule_outlined, Icons.schedule, 'Hadir', 'Kehadiran', 0),
+            (
+              Icons.assignment_outlined,
+              Icons.assignment,
+              'Mohon',
+              'Permohonan',
+              0
+            ),
+            (Icons.receipt_outlined, Icons.receipt, 'Slip', 'Slip gaji', 0),
+            (Icons.person_outline, Icons.person, 'Profil', 'Profil', 0),
           ];
+    Widget badged(IconData icon, int n) =>
+        Badge(isLabelVisible: n > 0, label: Text('$n'), child: Icon(icon));
 
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (_) => _bump(),
-      child: Scaffold(
-        body: IndexedStack(index: index, children: pages),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: index,
-          onDestinationSelected: go,
-          destinations: destinations,
-        ),
-      ),
+      child: LayoutBuilder(builder: (context, box) {
+        final wide = box.maxWidth >= 840;
+        final body = IndexedStack(index: index, children: pages);
+        if (!wide) {
+          return Scaffold(
+            body: body,
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: index,
+              onDestinationSelected: go,
+              destinations: [
+                for (final it in items)
+                  NavigationDestination(
+                      icon: badged(it.$1, it.$5),
+                      selectedIcon: badged(it.$2, it.$5),
+                      label: it.$3),
+              ],
+            ),
+          );
+        }
+        // Tablets and desktop: a navigation rail on the left, labels shown
+        // in full once there is room.
+        final extended = box.maxWidth >= 1200;
+        final cs = Theme.of(context).colorScheme;
+        return Scaffold(
+          body: Row(children: [
+            NavigationRail(
+              extended: extended,
+              minExtendedWidth: 232,
+              backgroundColor: cs.surface,
+              selectedIndex: index,
+              onDestinationSelected: go,
+              labelType: extended
+                  ? NavigationRailLabelType.none
+                  : NavigationRailLabelType.all,
+              leading: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 16, 8, 24),
+                child: extended
+                    ? const BrandLockup(markSize: 40)
+                    : const BrandMark(size: 44),
+              ),
+              trailing: Expanded(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 20),
+                    child: extended
+                        ? Text(store.me!.name,
+                            style: Theme.of(context).textTheme.bodySmall)
+                        : Avatar(store.me, radius: 16),
+                  ),
+                ),
+              ),
+              destinations: [
+                for (final it in items)
+                  NavigationRailDestination(
+                    icon: badged(it.$1, it.$5),
+                    selectedIcon: badged(it.$2, it.$5),
+                    label: Text(it.$4),
+                  ),
+              ],
+            ),
+            VerticalDivider(width: 1, color: cs.outlineVariant),
+            Expanded(child: body),
+          ]),
+        );
+      }),
     );
   }
 }
