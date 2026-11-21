@@ -44,6 +44,7 @@ class EmployeeHome extends StatelessWidget {
           Text(longDate(store.now),
               style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
         ]),
+        actions: const [ThemeToggleButton(), SizedBox(width: 8)],
       ),
       body: PageList(children: [
         const PunchCard(),

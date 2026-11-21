@@ -83,6 +83,17 @@ class ProfileScreen extends StatelessWidget {
             ],
           ]),
         ),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text('Paparan', style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+              Text('Disimpan dalam peranti ini', style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              const SizedBox(height: 12),
+              const ThemePicker(),
+            ]),
+          ),
+        ),
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           onPressed: store.signOut,

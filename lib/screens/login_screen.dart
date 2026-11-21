@@ -27,7 +27,10 @@ class LoginScreen extends StatelessWidget {
               shrinkWrap: MediaQuery.sizeOf(context).height > 760,
               padding: const EdgeInsets.fromLTRB(20, 40, 20, 24),
               children: [
-                const BrandLockup(markSize: 56),
+                const Row(children: [
+                  Expanded(child: Align(alignment: Alignment.centerLeft, child: BrandLockup(markSize: 56))),
+                  ThemeToggleButton(),
+                ]),
                 const SizedBox(height: 32),
                 Text('Log masuk sebagai',
                     style:

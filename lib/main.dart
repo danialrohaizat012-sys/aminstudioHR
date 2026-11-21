@@ -20,12 +20,20 @@ class PejabatHrApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return StoreScope(
       store: store,
-      child: MaterialApp(
-        title: 'Amin Studio HR',
-        debugShowCheckedModeBanner: false,
-        theme: buildTheme(Brightness.light),
-        darkTheme: buildTheme(Brightness.dark),
-        home: const _Root(),
+      child: ListenableBuilder(
+        listenable: store,
+        builder: (context, _) => MaterialApp(
+          title: 'Amin Studio HR',
+          themeMode: switch (store.themeChoice) {
+            'light' => ThemeMode.light,
+            'dark' => ThemeMode.dark,
+            _ => ThemeMode.system,
+          },
+          debugShowCheckedModeBanner: false,
+          theme: buildTheme(Brightness.light),
+          darkTheme: buildTheme(Brightness.dark),
+          home: const _Root(),
+        ),
       ),
     );
   }
@@ -37,10 +45,14 @@ class _Root extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
-    if (!store.loaded) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (!store.loaded) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 250),
-      child: store.me == null ? const LoginScreen() : Shell(key: ValueKey(store.currentUserId)),
+      child: store.me == null
+          ? const LoginScreen()
+          : Shell(key: ValueKey(store.currentUserId)),
     );
   }
 }

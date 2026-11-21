@@ -534,3 +534,39 @@ class EditableAvatar extends StatelessWidget {
     messenger.showSnackBar(const SnackBar(content: Text('Gambar profil dikemas kini')));
   }
 }
+
+/// Cerah / Gelap / Ikut sistem, remembered on this device.
+class ThemePicker extends StatelessWidget {
+  const ThemePicker({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    return SegmentedButton<String>(
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(value: 'light', icon: Icon(Icons.light_mode_outlined), label: Text('Cerah')),
+        ButtonSegment(value: 'dark', icon: Icon(Icons.dark_mode_outlined), label: Text('Gelap')),
+        ButtonSegment(value: 'system', icon: Icon(Icons.brightness_auto_outlined), label: Text('Sistem')),
+      ],
+      selected: {store.themeChoice},
+      onSelectionChanged: (v) => store.setTheme(v.first),
+    );
+  }
+}
+
+/// One-tap light/dark switch for app bars.
+class ThemeToggleButton extends StatelessWidget {
+  const ThemeToggleButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return IconButton(
+      tooltip: dark ? 'Mod cerah' : 'Mod gelap',
+      icon: Icon(dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+      onPressed: () => store.setTheme(dark ? 'light' : 'dark'),
+    );
+  }
+}

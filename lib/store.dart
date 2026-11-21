@@ -40,6 +40,14 @@ class HrStore extends ChangeNotifier {
   String? currentUserId;
   bool loaded = false;
 
+  /// Appearance on this device: 'system', 'light' or 'dark'.
+  String themeChoice = 'system';
+
+  Future<void> setTheme(String choice) async {
+    themeChoice = choice;
+    await _commit();
+  }
+
   // ---------------------------------------------------------------- session
   Employee? get me => currentUserId == null ? null : employeeById(currentUserId!);
   bool get isAdmin => me?.isAdmin ?? false;
@@ -961,6 +969,7 @@ class HrStore extends ChangeNotifier {
         'failedPins': failedPins,
         'lockedUntil': lockedUntil,
         'seenUpTo': seenUpTo,
+        'themeChoice': themeChoice,
         'adjustments': adjustments.map((k, v) => MapEntry(k, v.toJson())),
         'currentUserId': currentUserId,
       };
@@ -980,6 +989,7 @@ class HrStore extends ChangeNotifier {
     failedPins = Map<String, int>.from(j['failedPins'] ?? {});
     lockedUntil = Map<String, String>.from(j['lockedUntil'] ?? {});
     seenUpTo = Map<String, String>.from(j['seenUpTo'] ?? {});
+    themeChoice = j['themeChoice'] ?? 'system';
     adjustments = (j['adjustments'] as Map? ?? {})
         .map((k, v) => MapEntry(k as String, PayAdjustment.fromJson(Map<String, dynamic>.from(v))));
     currentUserId = j['currentUserId'];

@@ -67,6 +67,7 @@ class AdminHome extends StatelessWidget {
           Text(longDate(store.now), style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
         ]),
         actions: [
+          const ThemeToggleButton(),
           IconButton(
             tooltip: 'Buat pengumuman',
             onPressed: () => showAnnouncementForm(context),
