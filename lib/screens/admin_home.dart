@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../format.dart';
+import '../models.dart';
 import '../store.dart';
 import '../widgets/brand.dart';
 import '../widgets/common.dart';
@@ -36,6 +37,16 @@ class AdminHome extends StatelessWidget {
     final run = store.payrun(month);
     final lines = run?.lines ?? store.draftLines(month);
     final net = lines.fold(0.0, (s, l) => s + l.net);
+    final reminders = store.reminders();
+    final in14 = ymd(store.now.add(const Duration(days: 14)));
+    final upcoming = store.requests
+        .where((r) =>
+            r.kind == ReqKind.leave &&
+            r.status == ReqStatus.approved &&
+            r.from!.compareTo(today) > 0 &&
+            r.from!.compareTo(in14) <= 0)
+        .toList()
+      ..sort((a, b) => a.from!.compareTo(b.from!));
 
     return Scaffold(
       appBar: AppBar(
@@ -93,6 +104,44 @@ class AdminHome extends StatelessWidget {
                   ],
                 ]),
         ),
+        if (reminders.isNotEmpty)
+          Section(
+            title: 'Peringatan',
+            child: Column(children: [
+              for (final r in reminders.take(6))
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(children: [
+                    Avatar(r.empId == null ? null : store.employeeById(r.empId!)),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(r.title, style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
+                    Tag(_when(r.date, store.now), tone: r.tone),
+                  ]),
+                ),
+            ]),
+          ),
+        if (upcoming.isNotEmpty)
+          Section(
+            title: 'Cuti 14 hari akan datang',
+            child: Column(children: [
+              for (final r in upcoming)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(children: [
+                    Avatar(store.employeeById(r.empId)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(store.nameOf(r.empId), style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                        Text(requestTitle(r), style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                      ]),
+                    ),
+                    Text(r.from == r.to ? fmtShort(r.from) : '${fmtShort(r.from)} – ${fmtShort(r.to)}',
+                        style: t.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+            ]),
+          ),
         Section(
           title: workday ? 'Belum punch masuk' : 'Kehadiran',
           action: TextAction('Kehadiran penuh', onPressed: () => _openAttendance(context)),
@@ -188,4 +237,12 @@ class _PunchRulesCard extends StatelessWidget {
       ]),
     );
   }
+}
+
+String _when(DateTime d, DateTime now) {
+  final days = DateTime(d.year, d.month, d.day).difference(DateTime(now.year, now.month, now.day)).inDays;
+  if (days < 0) return '${-days} hari lepas';
+  if (days == 0) return 'Hari ini';
+  if (days == 1) return 'Esok';
+  return '${d.day} ${monthsMs[d.month - 1].substring(0, 3)} · $days hari';
 }

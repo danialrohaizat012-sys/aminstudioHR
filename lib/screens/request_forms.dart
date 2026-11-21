@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:material_ui/material_ui.dart';
 
 import '../format.dart';
 import '../models.dart';
+import '../services/punch_devices.dart';
 import '../store.dart';
 import '../theme.dart';
 
@@ -208,6 +211,7 @@ class _ClaimFormState extends State<_ClaimForm> {
   DateTime date = DateTime.now();
   final amount = TextEditingController();
   final note = TextEditingController();
+  String? receipt;
 
   @override
   void dispose() {
@@ -245,15 +249,36 @@ class _ClaimFormState extends State<_ClaimForm> {
           onChanged: (_) => setState(() {}),
         ),
         TextField(controller: note, decoration: const InputDecoration(labelText: 'Keterangan')),
+        Row(children: [
+          if (receipt != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.memory(base64Decode(receipt!), width: 56, height: 56, fit: BoxFit.cover),
+              ),
+            ),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final r = await punchDevices.receipt();
+                if (r != null && mounted) setState(() => receipt = r);
+              },
+              icon: const Icon(Icons.receipt_long_outlined, size: 18),
+              label: Text(receipt == null ? 'Ambil gambar resit' : 'Ambil semula'),
+            ),
+          ),
+        ]),
       ],
       submit: FilledButton(
         style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),
-        onPressed: value <= 0
+        onPressed: value <= 0 || value > 50000
             ? null
             : () async {
                 final nav = Navigator.of(context);
                 final messenger = ScaffoldMessenger.of(context);
-                await store.submitClaim(category: category, date: ymd(date), amount: value, note: note.text.trim());
+                await store.submitClaim(
+                    category: category, date: ymd(date), amount: value, note: note.text.trim(), receipt: receipt);
                 nav.pop();
                 messenger.showSnackBar(SnackBar(content: Text('Tuntutan ${rm(value)} dihantar')));
               },
@@ -325,6 +350,17 @@ class _OvertimeFormState extends State<_OvertimeForm> {
           onSelectionChanged: (s) => setState(() => rate = s.first),
         ),
         TextField(controller: note, decoration: const InputDecoration(labelText: 'Tugasan')),
+        Builder(builder: (context) {
+          final used = store.overtimeHours(store.me!.id, ymd(date).substring(0, 7));
+          final after = used + hours;
+          final over = after > HrStore.overtimeCapHours;
+          return Text(
+            'OT bulan ini: ${after.toStringAsFixed(1)} / ${HrStore.overtimeCapHours.toInt()} jam'
+            '${over ? '. Melebihi had Akta Kerja 1955.' : ''}',
+            style: t.bodySmall?.copyWith(
+                color: over ? statusColors(context, 'bad').fg : null, fontWeight: over ? FontWeight.w700 : null),
+          );
+        }),
       ],
       submit: FilledButton(
         style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(50)),

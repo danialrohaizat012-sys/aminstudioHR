@@ -9,7 +9,8 @@ import '../store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
-String fmtDistance(double m) => m < 1000 ? '${m.round()} m' : '${(m / 1000).toStringAsFixed(1)} km';
+String fmtDistance(double m) =>
+    m < 1000 ? '${m.round()} m' : '${(m / 1000).toStringAsFixed(1)} km';
 
 /// Full-screen punch in / punch out: live clock, location check against the
 /// office radius, optional selfie, and a reason when outside the area.
@@ -65,16 +66,19 @@ class _PunchScreenState extends State<PunchScreen> {
     final t = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
     final now = store.now;
-    final distance = fix?.ok == true ? store.distanceToOffice(fix!.lat, fix!.lng) : null;
+    final distance =
+        fix?.ok == true ? store.distanceToOffice(fix!.lat, fix!.lng) : null;
     final needsReason = !locating && store.outsideArea(distance);
-    final hasLocation = fix?.ok == true;
+    final hasLocation = fix?.ok == true && !fix!.mocked;
     final ready = !locating &&
         !saving &&
         hasLocation &&
         (!s.requireSelfie || photo != null) &&
         (!needsReason || note.text.trim().isNotEmpty);
     final action = widget.clockIn ? 'Punch masuk' : 'Punch keluar';
-    final late = widget.clockIn && hm(now).compareTo(s.startTime) > 0 && store.isWorkday(now);
+    final late = widget.clockIn &&
+        hm(now).compareTo(s.startTime) > 0 &&
+        store.isWorkday(now);
 
     return Scaffold(
       appBar: AppBar(title: Text(action)),
@@ -84,9 +88,13 @@ class _PunchScreenState extends State<PunchScreen> {
           Center(
             child: Column(children: [
               Text('${two(now.hour)}:${two(now.minute)}',
-                  style: t.displayLarge?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -3, height: 1)),
+                  style: t.displayLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -3,
+                      height: 1)),
               const SizedBox(height: 6),
-              Text(longDate(now), style: t.bodyLarge?.copyWith(color: cs.onSurfaceVariant)),
+              Text(longDate(now),
+                  style: t.bodyLarge?.copyWith(color: cs.onSurfaceVariant)),
               if (late)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -110,16 +118,28 @@ class _PunchScreenState extends State<PunchScreen> {
                   CircleAvatar(
                     radius: 36,
                     backgroundColor: cs.surfaceContainer,
-                    backgroundImage: photo == null ? null : MemoryImage(base64Decode(photo!)),
-                    child: photo == null ? Icon(Icons.face_outlined, color: cs.onSurfaceVariant) : null,
+                    backgroundImage: photo == null
+                        ? null
+                        : MemoryImage(base64Decode(photo!)),
+                    child: photo == null
+                        ? Icon(Icons.face_outlined, color: cs.onSurfaceVariant)
+                        : null,
                   ),
                   const SizedBox(width: 16),
                   Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Selfie', style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                      Text(photo == null ? 'Wajib sebagai bukti punch' : 'Gambar sedia. Akan disimpan bersama punch.',
-                          style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                    ]),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Selfie',
+                              style: t.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w700)),
+                          Text(
+                              photo == null
+                                  ? 'Wajib sebagai bukti punch'
+                                  : 'Gambar sedia. Akan disimpan bersama punch.',
+                              style: t.bodySmall
+                                  ?.copyWith(color: cs.onSurfaceVariant)),
+                        ]),
                   ),
                   OutlinedButton.icon(
                     onPressed: _selfie,
@@ -144,7 +164,9 @@ class _PunchScreenState extends State<PunchScreen> {
           ],
           const SizedBox(height: 24),
           FilledButton.icon(
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56), textStyle: t.titleMedium),
+            style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(56),
+                textStyle: t.titleMedium),
             onPressed: ready ? () => _submit(store, distance) : null,
             icon: Icon(widget.clockIn ? Icons.login : Icons.logout),
             label: Text(saving ? 'Menyimpan…' : '$action sekarang'),
@@ -153,14 +175,18 @@ class _PunchScreenState extends State<PunchScreen> {
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Text(
-                !hasLocation
-                    ? 'Punch tidak boleh dibuat selagi lokasi telefon dimatikan atau tidak dibenarkan.'
-                    : s.requireSelfie && photo == null
-                        ? 'Ambil selfie dahulu sebagai bukti.'
-                        : 'Nyatakan sebab punch di luar kawasan.',
+                fix?.mocked == true
+                    ? 'Punch disekat kerana lokasi palsu dikesan.'
+                    : !hasLocation
+                        ? 'Punch tidak boleh dibuat selagi lokasi telefon dimatikan atau tidak dibenarkan.'
+                        : s.requireSelfie && photo == null
+                            ? 'Ambil selfie dahulu sebagai bukti.'
+                            : 'Nyatakan sebab punch di luar kawasan.',
                 textAlign: TextAlign.center,
                 style: t.bodySmall?.copyWith(
-                    color: !hasLocation ? statusColors(context, 'bad').fg : cs.onSurfaceVariant,
+                    color: !hasLocation
+                        ? statusColors(context, 'bad').fg
+                        : cs.onSurfaceVariant,
                     fontWeight: !hasLocation ? FontWeight.w600 : null),
               ),
             ),
@@ -176,8 +202,20 @@ class _PunchScreenState extends State<PunchScreen> {
     final f = fix;
     final reason = note.text.trim();
     final error = widget.clockIn
-        ? await store.punchIn(lat: f?.lat, lng: f?.lng, accuracy: f?.accuracy, photo: photo, note: reason)
-        : await store.punchOut(lat: f?.lat, lng: f?.lng, accuracy: f?.accuracy, photo: photo, note: reason);
+        ? await store.punchIn(
+            lat: f?.lat,
+            lng: f?.lng,
+            accuracy: f?.accuracy,
+            photo: photo,
+            note: reason,
+            mocked: f?.mocked ?? false)
+        : await store.punchOut(
+            lat: f?.lat,
+            lng: f?.lng,
+            accuracy: f?.accuracy,
+            photo: photo,
+            note: reason,
+            mocked: f?.mocked ?? false);
     if (error != null) {
       if (mounted) setState(() => saving = false);
       messenger.showSnackBar(SnackBar(content: Text(error)));
@@ -185,14 +223,19 @@ class _PunchScreenState extends State<PunchScreen> {
     }
     nav.pop(true);
     messenger.showSnackBar(SnackBar(
-      content: Text('${widget.clockIn ? 'Punch masuk' : 'Punch keluar'} ${hm(store.now)} direkod'
+      content: Text(
+          '${widget.clockIn ? 'Punch masuk' : 'Punch keluar'} ${hm(store.now)} direkod'
           '${distance != null ? ' · ${fmtDistance(distance)} dari kedai' : ''}'),
     ));
   }
 }
 
 class _LocationCard extends StatelessWidget {
-  const _LocationCard({required this.locating, required this.fix, required this.distance, required this.onRetry});
+  const _LocationCard(
+      {required this.locating,
+      required this.fix,
+      required this.distance,
+      required this.onRetry});
   final bool locating;
   final LocationFix? fix;
   final double? distance;
@@ -217,19 +260,27 @@ class _LocationCard extends StatelessWidget {
       detail = fix?.error ?? 'Hidupkan lokasi telefon dan cuba lagi.';
       tone = 'bad';
       icon = Icons.location_off_outlined;
+    } else if (fix!.mocked) {
+      title = 'Lokasi palsu dikesan';
+      detail = 'Matikan app lokasi palsu (mock location) dan cuba lagi.';
+      tone = 'bad';
+      icon = Icons.gpp_bad_outlined;
     } else if (!s.hasOffice) {
       title = 'Lokasi direkod';
-      detail = 'Ketepatan ±${fix!.accuracy?.round() ?? '?'} m. HR belum tetapkan lokasi kedai.';
+      detail =
+          'Ketepatan ±${fix!.accuracy?.round() ?? '?'} m. HR belum tetapkan lokasi kedai.';
       tone = 'mute';
       icon = Icons.location_on_outlined;
     } else if (distance! <= s.radiusM) {
       title = 'Dalam kawasan kedai';
-      detail = '${fmtDistance(distance!)} dari kedai · ketepatan ±${fix!.accuracy?.round() ?? '?'} m';
+      detail =
+          '${fmtDistance(distance!)} dari kedai · ketepatan ±${fix!.accuracy?.round() ?? '?'} m';
       tone = 'ok';
       icon = Icons.where_to_vote_outlined;
     } else {
       title = 'Luar kawasan kedai';
-      detail = '${fmtDistance(distance!)} dari kedai (had ${fmtDistance(s.radiusM)})';
+      detail =
+          '${fmtDistance(distance!)} dari kedai (had ${fmtDistance(s.radiusM)})';
       tone = s.requireLocation ? 'warn' : 'mute';
       icon = Icons.wrong_location_outlined;
     }
@@ -238,30 +289,69 @@ class _LocationCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
             Container(
               width: 44,
               height: 44,
-              decoration: BoxDecoration(color: c.bg, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                  color: c.bg, borderRadius: BorderRadius.circular(12)),
               child: Icon(icon, color: c.fg),
             ),
             const SizedBox(width: 14),
             Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(title, style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                Text(detail, style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-              ]),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: t.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700)),
+                    Text(detail,
+                        style:
+                            t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                  ]),
             ),
-            if (!locating && (fix == null || !fix!.ok))
+            if (!locating && (fix == null || !fix!.ok || fix!.mocked))
               TextButton(onPressed: onRetry, child: const Text('Cuba lagi')),
           ]),
           if (locating) ...[
             const SizedBox(height: 12),
-            ClipRRect(borderRadius: BorderRadius.circular(99), child: const LinearProgressIndicator(minHeight: 4)),
+            ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: const LinearProgressIndicator(minHeight: 4)),
           ],
         ]),
       ),
     );
   }
 }
+
+/// PDPA 2010 notice shown once before the first punch: what is collected,
+/// why, who sees it. Returns true when the employee agrees.
+Future<bool?> showPrivacyNotice(BuildContext context) => showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        icon: const Icon(Icons.privacy_tip_outlined),
+        title: const Text('Notis privasi punch'),
+        content: const SingleChildScrollView(
+          child: Text(
+            'Setiap kali anda punch masuk atau keluar, app ini merekod:\n\n'
+            '• Lokasi GPS telefon dan jaraknya dari kedai\n'
+            '• Selfie sebagai bukti (jika diwajibkan majikan)\n'
+            '• Masa punch\n\n'
+            'Data ini digunakan untuk rekod kehadiran dan gaji sahaja, hanya boleh dilihat oleh anda dan pengurus HR, '
+            'dan lokasi hanya dibaca ketika anda menekan butang punch, bukan sepanjang masa.\n\n'
+            'Anda boleh bertanya kepada HR untuk melihat atau membetulkan data anda di bawah Akta Perlindungan Data Peribadi 2010.',
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Tidak setuju')),
+          FilledButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Setuju')),
+        ],
+      ),
+    );

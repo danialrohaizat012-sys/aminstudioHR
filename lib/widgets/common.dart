@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:material_ui/material_ui.dart';
 
 import '../format.dart';
@@ -224,7 +226,7 @@ class ApprovalTile extends StatelessWidget {
     final e = store.employeeById(r.empId);
     final t = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
-    String? balanceNote;
+    String? balanceNote, receipt;
     var overdraw = false;
     if (showBalance && r.kind == ReqKind.leave) {
       final b = store.leaveBalance(r.empId, r.leaveType!);
@@ -233,7 +235,15 @@ class ApprovalTile extends StatelessWidget {
         overdraw = b - r.days < 0;
       }
     }
-    if (showBalance && r.kind == ReqKind.overtime) balanceNote = 'Anggaran bayaran ${rm(store.overtimePay(r))}';
+    if (showBalance && r.kind == ReqKind.overtime) {
+      final month = (r.date ?? '').substring(0, 7);
+      final total = store.overtimeHours(r.empId, month);
+      overdraw = total > HrStore.overtimeCapHours;
+      balanceNote = 'Anggaran bayaran ${rm(store.overtimePay(r))} · '
+          '${total.toStringAsFixed(1)} / ${HrStore.overtimeCapHours.toInt()} jam OT bulan ini'
+          '${overdraw ? ' (melebihi had Akta Kerja)' : ''}';
+    }
+    if (r.kind == ReqKind.claim && r.receipt != null) receipt = r.receipt;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -247,6 +257,27 @@ class ApprovalTile extends StatelessWidget {
               Text(requestDetail(r), style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
               if (r.note.isNotEmpty)
                 Text('“${r.note}”', style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              if (receipt != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: InkWell(
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      builder: (c) => Dialog(
+                        clipBehavior: Clip.antiAlias,
+                        child: InteractiveViewer(child: Image.memory(base64Decode(receipt!))),
+                      ),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.memory(base64Decode(receipt), width: 44, height: 44, fit: BoxFit.cover),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('Lihat resit', style: t.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+                    ]),
+                  ),
+                ),
               if (balanceNote != null)
                 Text(balanceNote,
                     style: t.bodySmall?.copyWith(
@@ -287,6 +318,7 @@ class ApprovalTile extends StatelessWidget {
     await store.decide(r.id, s);
     messenger.showSnackBar(SnackBar(
       content: Text('${r.kind.label} $name ${s == ReqStatus.approved ? 'diluluskan' : 'ditolak'}'),
+      action: SnackBarAction(label: 'Batal', onPressed: () => store.undoDecision(r.id)),
     ));
   }
 }

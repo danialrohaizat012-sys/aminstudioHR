@@ -281,6 +281,14 @@ class _PunchCardState extends State<PunchCard> {
     );
   }
 
-  void _act(BuildContext context, bool clockIn) => Navigator.of(context)
-      .push(MaterialPageRoute(builder: (_) => PunchScreen(clockIn: clockIn), fullscreenDialog: true));
+  Future<void> _act(BuildContext context, bool clockIn) async {
+    final store = StoreScope.of(context);
+    final nav = Navigator.of(context);
+    if (store.me!.consentAt == null) {
+      final ok = await showPrivacyNotice(context);
+      if (ok != true) return;
+      await store.recordConsent();
+    }
+    nav.push(MaterialPageRoute(builder: (_) => PunchScreen(clockIn: clockIn), fullscreenDialog: true));
+  }
 }

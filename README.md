@@ -7,7 +7,7 @@ Aplikasi mudah alih HR untuk SME Malaysia: kehadiran, cuti, tuntutan, lebih masa
 ```bash
 flutter pub get
 flutter run            # pilih telefon, emulator atau Chrome
-flutter test           # 17 ujian: caruman, cuti, kelulusan, gaji, punch (lokasi, selfie, kawasan), log masuk
+flutter test           # 27 ujian: caruman, cuti, kelulusan, gaji, punch, PIN, peranan, audit, peringatan
 ```
 
 ![Paparan pekerja](docs/screenshots/pekerja.png)
@@ -23,6 +23,15 @@ Skrin log masuk menyenaraikan akaun contoh:
 - **Aisyah, Arun, Hafiz, Mei Ling** (pekerja) nampak punch masuk, baki cuti, permohonan dan slip gaji.
 
 Data disimpan dalam peranti (`shared_preferences`). "Set semula data demo" di skrin log masuk memulihkan data contoh.
+
+## Keselamatan
+
+- Log masuk dengan **PIN 6 digit** (hash SHA-256 bergaram, bukan teks biasa). 5 cubaan salah mengunci akaun 5 minit. PIN demo: `246810`; tukar di Profil.
+- Log keluar automatik selepas 10 minit tanpa aktiviti.
+- Semua tindakan pengurus disemak dalam kod dan direkod dalam **Log audit** (Profil > Log audit).
+- Gaji, No. KP dan akaun bank disorok sehingga ditekan "Tunjuk".
+- Notis privasi (PDPA 2010) sebelum punch pertama. Lokasi palsu disekat.
+- Laporan audit penuh: [`docs/AUDIT.md`](docs/AUDIT.md).
 
 ## Punch masuk / keluar
 

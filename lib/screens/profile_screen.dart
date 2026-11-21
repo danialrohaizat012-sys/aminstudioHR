@@ -4,6 +4,7 @@ import '../format.dart';
 import '../store.dart';
 import '../widgets/common.dart';
 import 'announcements_screen.dart';
+import 'audit_screen.dart';
 import 'punch_settings_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -49,12 +50,27 @@ class ProfileScreen extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: Column(children: [
             ListTile(
+              leading: const Icon(Icons.password_outlined),
+              title: const Text('Tukar PIN'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _changePin(context),
+            ),
+            const Divider(indent: 56),
+            ListTile(
               leading: const Icon(Icons.campaign_outlined),
               title: const Text('Pengumuman'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AnnouncementsScreen())),
             ),
             if (store.isAdmin) ...[
+              const Divider(indent: 56),
+              ListTile(
+                leading: const Icon(Icons.history),
+                title: const Text('Log audit'),
+                subtitle: Text('${store.audit.length} rekod tindakan pengurus'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AuditScreen())),
+              ),
               const Divider(indent: 56),
               ListTile(
                 leading: const Icon(Icons.tune),
@@ -76,6 +92,59 @@ class ProfileScreen extends StatelessWidget {
       ]),
     );
   }
+}
+
+Future<void> _changePin(BuildContext context) async {
+  final store = StoreScope.of(context);
+  final messenger = ScaffoldMessenger.of(context);
+  final old = TextEditingController(), next = TextEditingController(), again = TextEditingController();
+  String? error;
+  await showDialog<void>(
+    context: context,
+    builder: (c) => StatefulBuilder(
+      builder: (c, set) {
+        InputDecoration dec(String l) => InputDecoration(labelText: l, counterText: '');
+        Widget f(TextEditingController ctl, String l) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: TextField(
+                controller: ctl,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: dec(l),
+              ),
+            );
+        return AlertDialog(
+          title: const Text('Tukar PIN'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            f(old, 'PIN semasa'),
+            f(next, 'PIN baharu (6 digit)'),
+            f(again, 'Ulang PIN baharu'),
+            if (error != null) Text(error!, style: TextStyle(color: Theme.of(c).colorScheme.error)),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c), child: const Text('Batal')),
+            FilledButton(
+              onPressed: () async {
+                if (next.text != again.text) {
+                  set(() => error = 'PIN baharu tidak sama.');
+                  return;
+                }
+                final err = await store.changePin(old.text, next.text);
+                if (err != null) {
+                  set(() => error = err);
+                  return;
+                }
+                if (c.mounted) Navigator.pop(c);
+                messenger.showSnackBar(const SnackBar(content: Text('PIN ditukar')));
+              },
+              child: const Text('Simpan'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
 }
 
 class SettingsScreen extends StatefulWidget {

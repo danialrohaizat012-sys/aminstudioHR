@@ -121,15 +121,48 @@ class EmployeeDetail extends StatelessWidget {
             kv('Mula kerja', '${fmtDate(ymd(e.joinDate))} (${tenure(e.joinDate)})'),
             kv('Emel', e.email),
             kv('Telefon', e.phone),
-            kv('No. KP', e.ic),
+          ]),
+        ),
+        _SalarySection(e: e),
+        Section(
+          title: 'Kontrak',
+          child: Column(children: [
+            kv('Tamat percubaan', e.probationEnd == null ? '—' : fmtDate(e.probationEnd)),
+            kv('Tamat kontrak', e.contractEnd == null ? 'Tetap' : fmtDate(e.contractEnd)),
+            kv('Hari jadi', e.birthDate == null ? '—' : '${e.birthDate!.day} ${monthsMs[e.birthDate!.month - 1]}'),
           ]),
         ),
         Section(
-          title: 'Gaji (sulit)',
-          child: Column(children: [
-            kv('Gaji pokok', rm(e.salary)),
-            kv('Elaun tetap', rm(e.allowance)),
-            kv('Bank', '${e.bank} ${e.bankAcc}'.trim()),
+          title: 'Akses',
+          child: Row(children: [
+            Expanded(
+              child: Text(
+                store.lockMinutesLeft(e.id) > 0
+                    ? 'Dikunci ${store.lockMinutesLeft(e.id)} minit kerana PIN salah'
+                    : store.needsPin(e.id)
+                        ? 'Belum cipta PIN'
+                        : 'PIN ditetapkan',
+                style: t.bodyMedium,
+              ),
+            ),
+            if (!store.needsPin(e.id) && e.id != store.me!.id)
+              OutlinedButton(
+                onPressed: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      title: Text('Set semula PIN ${e.firstName}?'),
+                      content: const Text('Pekerja akan cipta PIN baharu semasa log masuk seterusnya.'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Batal')),
+                        FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Set semula')),
+                      ],
+                    ),
+                  );
+                  if (ok == true) await store.resetPin(e.id);
+                },
+                child: const Text('Set semula PIN'),
+              ),
           ]),
         ),
         Section(
@@ -169,6 +202,7 @@ class _EmployeeFormState extends State<EmployeeForm> {
   late final Map<String, TextEditingController> c;
   late DateTime join;
   late bool active;
+  String? probation, contract;
 
   @override
   void initState() {
@@ -190,6 +224,9 @@ class _EmployeeFormState extends State<EmployeeForm> {
     };
     join = e?.joinDate ?? DateTime.now();
     active = e?.active ?? true;
+    probation = e?.probationEnd ??
+        (e == null ? ymd(DateTime(join.year, join.month + 3, join.day)) : null); // 3-month default
+    contract = e?.contractEnd;
   }
 
   @override
@@ -241,6 +278,16 @@ class _EmployeeFormState extends State<EmployeeForm> {
               ),
             ),
           ),
+          _OptionalDate(
+            label: 'Tamat percubaan',
+            value: probation,
+            onChanged: (v) => setState(() => probation = v),
+          ),
+          _OptionalDate(
+            label: 'Tamat kontrak (kosong = tetap)',
+            value: contract,
+            onChanged: (v) => setState(() => contract = v),
+          ),
           Row(children: [
             Expanded(child: field('leaveAnnual', 'Cuti tahunan', type: TextInputType.number)),
             const SizedBox(width: 12),
@@ -251,7 +298,21 @@ class _EmployeeFormState extends State<EmployeeForm> {
           const SizedBox(height: 20),
           Text('Gaji & peribadi (sulit)', style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
-          field('salary', 'Gaji pokok', type: money, required: true, prefix: 'RM '),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: TextFormField(
+              controller: c['salary'],
+              keyboardType: money,
+              decoration: const InputDecoration(labelText: 'Gaji pokok', prefixText: 'RM ',
+                  helperText: 'Gaji minimum RM1,700 sebulan (Perintah Gaji Minimum 2024)'),
+              validator: (v) {
+                final x = double.tryParse((v ?? '').replaceAll(',', ''));
+                if (x == null || x <= 0) return 'Masukkan gaji yang sah';
+                if (x > 1000000) return 'Nilai terlalu besar';
+                return null;
+              },
+            ),
+          ),
           field('allowance', 'Elaun tetap', type: money, prefix: 'RM '),
           field('ic', 'No. KP'),
           field('email', 'Emel', type: TextInputType.emailAddress),
@@ -289,6 +350,8 @@ class _EmployeeFormState extends State<EmployeeForm> {
                 leaveMedical: int.tryParse(c['leaveMedical']!.text) ?? 14,
                 isAdmin: old?.isAdmin ?? false,
                 active: active,
+                probationEnd: probation,
+                contractEnd: contract,
               );
               final nav = Navigator.of(context);
               final messenger = ScaffoldMessenger.of(context);
@@ -302,4 +365,77 @@ class _EmployeeFormState extends State<EmployeeForm> {
       ),
     );
   }
+}
+
+class _SalarySection extends StatefulWidget {
+  const _SalarySection({required this.e});
+  final Employee e;
+  @override
+  State<_SalarySection> createState() => _SalarySectionState();
+}
+
+class _SalarySectionState extends State<_SalarySection> {
+  bool shown = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final e = widget.e;
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    String mask(String v) => shown ? v : '••••••';
+    Widget kv(String k, String v) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(children: [
+            SizedBox(width: 120, child: Text(k, style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant))),
+            Expanded(child: Text(v, style: t.bodyMedium)),
+          ]),
+        );
+    return Section(
+      title: 'Gaji (sulit)',
+      action: TextButton.icon(
+        onPressed: () => setState(() => shown = !shown),
+        icon: Icon(shown ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
+        label: Text(shown ? 'Sembunyi' : 'Tunjuk'),
+      ),
+      child: Column(children: [
+        kv('Gaji pokok', mask(rm(e.salary))),
+        kv('Elaun tetap', mask(rm(e.allowance))),
+        kv('No. KP', mask(e.ic)),
+        kv('Bank', mask('${e.bank} ${e.bankAcc}'.trim())),
+      ]),
+    );
+  }
+}
+
+class _OptionalDate extends StatelessWidget {
+  const _OptionalDate({required this.label, required this.value, required this.onChanged});
+  final String label;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            final d = await showDatePicker(
+              context: context,
+              initialDate: value == null ? DateTime.now() : parseYmd(value!),
+              firstDate: DateTime(2000),
+              lastDate: DateTime(2100),
+            );
+            if (d != null) onChanged(ymd(d));
+          },
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: label,
+              suffixIcon: value == null
+                  ? const Icon(Icons.calendar_today_outlined, size: 20)
+                  : IconButton(icon: const Icon(Icons.clear), onPressed: () => onChanged(null)),
+            ),
+            child: Text(value == null ? 'Tiada' : fmtDate(value)),
+          ),
+        ),
+      );
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -26,6 +27,13 @@ class HrStore extends ChangeNotifier {
   List<Announcement> announcements = [];
   List<PayRun> payruns = [];
   CompanySettings settings = CompanySettings();
+  List<AuditEntry> audit = [];
+  Map<String, int> failedPins = {};
+  Map<String, String> lockedUntil = {}; // empId -> ISO time
+
+  static const maxPinAttempts = 5;
+  static const demoPin = '246810';
+  static const lockMinutes = 5;
 
   String? currentUserId;
   bool loaded = false;
@@ -34,10 +42,108 @@ class HrStore extends ChangeNotifier {
   Employee? get me => currentUserId == null ? null : employeeById(currentUserId!);
   bool get isAdmin => me?.isAdmin ?? false;
 
-  Future<void> signIn(String empId) async {
+  static String hashPin(String pin, String salt) => sha256.convert(utf8.encode('$salt:$pin')).toString();
+
+  bool needsPin(String empId) => employeeById(empId)?.pinHash == null;
+
+  /// Minutes left on a lockout after too many wrong PINs, or 0.
+  int lockMinutesLeft(String empId) {
+    final until = lockedUntil[empId];
+    if (until == null) return 0;
+    final left = DateTime.parse(until).difference(now).inSeconds;
+    return left <= 0 ? 0 : (left / 60).ceil();
+  }
+
+  /// Signs in with a PIN. Returns null on success or the reason it failed.
+  Future<String?> signIn(String empId, String pin) async {
+    final e = employeeById(empId);
+    if (e == null || !e.active) return 'Akaun tidak aktif.';
+    final locked = lockMinutesLeft(empId);
+    if (locked > 0) return 'Terlalu banyak cubaan salah. Cuba lagi dalam $locked minit.';
+    if (e.pinHash == null) return 'PIN belum ditetapkan.';
+    if (hashPin(pin, e.pinSalt ?? '') != e.pinHash) {
+      final n = (failedPins[empId] ?? 0) + 1;
+      failedPins[empId] = n;
+      if (n >= maxPinAttempts) {
+        failedPins.remove(empId);
+        lockedUntil[empId] = now.add(const Duration(minutes: lockMinutes)).toIso8601String();
+        await _commit();
+        return 'PIN salah $maxPinAttempts kali. Akaun dikunci $lockMinutes minit.';
+      }
+      await _commit();
+      return 'PIN salah. ${maxPinAttempts - n} cubaan lagi.';
+    }
+    failedPins.remove(empId);
+    lockedUntil.remove(empId);
     currentUserId = empId;
-    await _save();
+    await _commit();
+    return null;
+  }
+
+  /// First sign-in on an account without a PIN: choose one.
+  Future<String?> createPin(String empId, String pin) async {
+    final e = employeeById(empId);
+    if (e == null || e.pinHash != null) return 'PIN sudah ditetapkan.';
+    final err = pinProblem(pin);
+    if (err != null) return err;
+    _setPin(e, pin);
+    currentUserId = empId;
+    await _commit();
+    return null;
+  }
+
+  Future<String?> changePin(String oldPin, String newPin) async {
+    final e = me!;
+    if (hashPin(oldPin, e.pinSalt ?? '') != e.pinHash) return 'PIN lama salah.';
+    final err = pinProblem(newPin);
+    if (err != null) return err;
+    _setPin(e, newPin);
+    await _commit();
+    return null;
+  }
+
+  /// Manager clears an employee's PIN; they choose a new one at next sign-in.
+  Future<void> resetPin(String empId) async {
+    if (!isAdmin) return;
+    final e = employeeById(empId)!;
+    e.pinHash = null;
+    e.pinSalt = null;
+    lockedUntil.remove(empId);
+    failedPins.remove(empId);
+    _log('Set semula PIN', e.name);
+    await _commit();
+  }
+
+  static String? pinProblem(String pin) {
+    if (!RegExp(r'^\d{6}$').hasMatch(pin)) return 'PIN mesti 6 digit.';
+    if (RegExp(r'^(\d)\1{5}$').hasMatch(pin) || '0123456789'.contains(pin) || '9876543210'.contains(pin)) {
+      return 'PIN terlalu mudah diteka. Elak nombor berulang atau berturutan.';
+    }
+    return null;
+  }
+
+  void _setPin(Employee e, String pin) {
+    final salt = List.generate(16, (_) => math.Random.secure().nextInt(256))
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+    e.pinSalt = salt;
+    e.pinHash = hashPin(pin, salt);
+  }
+
+  @visibleForTesting
+  Future<void> signInForTest(String empId) async {
+    currentUserId = empId;
     notifyListeners();
+  }
+
+  void _log(String action, [String detail = '']) {
+    audit.insert(0, AuditEntry(at: now, by: me?.name ?? 'Sistem', action: action, detail: detail));
+    if (audit.length > 500) audit.removeRange(500, audit.length);
+  }
+
+  Future<void> recordConsent() async {
+    me!.consentAt = now.toIso8601String();
+    await _commit();
   }
 
   Future<void> signOut() async {
@@ -250,9 +356,12 @@ class HrStore extends ChangeNotifier {
 
   /// Why a punch cannot be recorded, or null when it can. Location is always
   /// required: a punch is refused while the phone's location is off.
-  String? punchBlocker({double? lat, double? lng, String? photo, String note = ''}) {
+  String? punchBlocker({double? lat, double? lng, String? photo, String note = '', bool mocked = false}) {
     if (lat == null || lng == null) {
       return 'Lokasi telefon perlu dihidupkan untuk punch.';
+    }
+    if (mocked) {
+      return 'Lokasi palsu (mock location) dikesan. Matikan app lokasi palsu dan cuba lagi.';
     }
     if (settings.requireSelfie && (photo == null || photo.isEmpty)) {
       return 'Selfie wajib sebagai bukti punch.';
@@ -264,11 +373,12 @@ class HrStore extends ChangeNotifier {
   }
 
   /// Returns null on success, or the reason the punch was refused.
-  Future<String?> punchIn({double? lat, double? lng, double? accuracy, String? photo, String note = ''}) async {
+  Future<String?> punchIn(
+      {double? lat, double? lng, double? accuracy, String? photo, String note = '', bool mocked = false}) async {
     final e = me!;
     final d = ymd(now);
     if (attendanceOn(e.id, d)?.clockIn != null) return 'Anda sudah punch masuk hari ini.';
-    final blocked = punchBlocker(lat: lat, lng: lng, photo: photo, note: note);
+    final blocked = punchBlocker(lat: lat, lng: lng, photo: photo, note: note, mocked: mocked);
     if (blocked != null) return blocked;
     attendance['${e.id}_$d'] = AttendanceRecord(
       empId: e.id,
@@ -281,11 +391,12 @@ class HrStore extends ChangeNotifier {
   }
 
   /// Returns null on success, or the reason the punch was refused.
-  Future<String?> punchOut({double? lat, double? lng, double? accuracy, String? photo, String note = ''}) async {
+  Future<String?> punchOut(
+      {double? lat, double? lng, double? accuracy, String? photo, String note = '', bool mocked = false}) async {
     final rec = attendanceOn(me!.id, ymd(now));
     if (rec == null || rec.clockIn == null) return 'Punch masuk dahulu.';
     if (rec.clockOut != null) return 'Anda sudah punch keluar hari ini.';
-    final blocked = punchBlocker(lat: lat, lng: lng, photo: photo, note: note);
+    final blocked = punchBlocker(lat: lat, lng: lng, photo: photo, note: note, mocked: mocked);
     if (blocked != null) return blocked;
     rec.clockOut = hm(now);
     rec.outMark = _mark(lat: lat, lng: lng, accuracy: accuracy, photo: photo, note: note);
@@ -306,6 +417,7 @@ class HrStore extends ChangeNotifier {
       rec.editedBy = me!.name;
       attendance[key] = rec;
     }
+    _log('Betulkan kehadiran', '${nameOf(empId)} · $date · ${clockIn ?? '—'} → ${clockOut ?? '—'}');
     await _commit();
   }
 
@@ -321,7 +433,46 @@ class HrStore extends ChangeNotifier {
     return DayStatus.absent;
   }
 
+  /// Dates the owner should not miss in the next [days] days (and anything
+  /// already overdue in the last 7): probation and contract ends, birthdays,
+  /// work anniversaries.
+  List<Reminder> reminders({int days = 30}) {
+    final today = DateTime(now.year, now.month, now.day);
+    final out = <Reminder>[];
+    void add(String? ymdStr, String title, Employee e, String tone) {
+      if (ymdStr == null) return;
+      final d = parseYmd(ymdStr);
+      final diff = d.difference(today).inDays;
+      if (diff >= -7 && diff <= days) out.add(Reminder(date: d, title: title, empId: e.id, tone: diff < 0 ? 'bad' : tone));
+    }
+
+    DateTime nextYearly(int month, int day) {
+      final d = DateTime(today.year, month, day);
+      return d.isBefore(today) ? DateTime(today.year + 1, month, day) : d;
+    }
+
+    for (final e in activeEmployees) {
+      add(e.probationEnd, 'Tamat percubaan ${e.firstName}', e, 'warn');
+      add(e.contractEnd, 'Kontrak ${e.firstName} tamat', e, 'warn');
+      final b = e.birthDate;
+      if (b != null) {
+        final d = nextYearly(b.month, b.day);
+        if (d.difference(today).inDays <= 14) out.add(Reminder(date: d, title: 'Hari jadi ${e.firstName}', empId: e.id));
+      }
+      final j = e.joinDate;
+      final a = nextYearly(j.month, j.day);
+      final years = a.year - j.year;
+      if (years > 0 && a.difference(today).inDays <= 14) {
+        out.add(Reminder(date: a, title: '$years tahun ${e.firstName} bersama syarikat', empId: e.id));
+      }
+    }
+    out.sort((a, b) => a.date.compareTo(b.date));
+    return out;
+  }
+
   Future<void> setOffice(double lat, double lng) async {
+    if (!isAdmin) return;
+    _log('Tetapkan lokasi kedai', '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}');
     settings.officeLat = lat;
     settings.officeLng = lng;
     await _commit();
@@ -354,7 +505,9 @@ class HrStore extends ChangeNotifier {
     required String date,
     required double amount,
     String note = '',
+    String? receipt,
   }) async {
+    if (amount <= 0 || amount > 50000) return;
     requests.add(HrRequest(
       id: _id(),
       kind: ReqKind.claim,
@@ -364,6 +517,7 @@ class HrStore extends ChangeNotifier {
       date: date,
       amount: amount,
       note: note,
+      receipt: receipt,
     ));
     await _commit();
   }
@@ -374,6 +528,7 @@ class HrStore extends ChangeNotifier {
     required double rate,
     String note = '',
   }) async {
+    if (hours <= 0 || hours > 12) return;
     requests.add(HrRequest(
       id: _id(),
       kind: ReqKind.overtime,
@@ -395,30 +550,78 @@ class HrStore extends ChangeNotifier {
   Future<void> decide(String id, ReqStatus status) async {
     if (!isAdmin) return;
     final r = requests.firstWhere((r) => r.id == id);
+    if (r.empId == me!.id) return; // no approving your own requests
     r.status = status;
     r.decidedAt = now;
+    _log(status == ReqStatus.approved ? 'Lulus ${r.kind.label.toLowerCase()}' : 'Tolak ${r.kind.label.toLowerCase()}',
+        '${nameOf(r.empId)} · ${_reqSummary(r)}');
     await _commit();
   }
+
+  /// Undo a decision made by mistake (the request goes back to pending).
+  Future<void> undoDecision(String id) async {
+    if (!isAdmin) return;
+    final r = requests.firstWhere((r) => r.id == id);
+    r.status = ReqStatus.pending;
+    r.decidedAt = null;
+    _log('Batal keputusan ${r.kind.label.toLowerCase()}', '${nameOf(r.empId)} · ${_reqSummary(r)}');
+    await _commit();
+  }
+
+  String _reqSummary(HrRequest r) => switch (r.kind) {
+        ReqKind.leave => '${r.leaveType} ${r.from}${r.to != r.from ? ' – ${r.to}' : ''}',
+        ReqKind.claim => 'RM ${r.amount.toStringAsFixed(2)} ${r.category}',
+        ReqKind.overtime => '${r.hours} jam ${r.date}',
+      };
+
+  /// Approved plus pending overtime hours in a month (Employment Act cap: 104).
+  double overtimeHours(String empId, String month) => requests
+      .where((r) =>
+          r.kind == ReqKind.overtime &&
+          r.empId == empId &&
+          r.status != ReqStatus.rejected &&
+          (r.date ?? '').startsWith(month))
+      .fold(0.0, (s, r) => s + r.hours);
+
+  static const overtimeCapHours = 104.0;
 
   Future<void> finalizePayroll(String month) async {
     if (!isAdmin) return;
     payruns.removeWhere((p) => p.month == month);
-    payruns.add(PayRun(month: month, createdAt: now, lines: draftLines(month)));
+    final lines = draftLines(month);
+    payruns.add(PayRun(month: month, createdAt: now, lines: lines));
+    _log('Muktamadkan gaji', '$month · ${lines.length} pekerja');
     await _commit();
   }
 
   Future<void> reopenPayroll(String month) async {
     if (!isAdmin) return;
     payruns.removeWhere((p) => p.month == month);
+    _log('Buka semula gaji', month);
     await _commit();
   }
 
   Future<void> saveEmployee(Employee e) async {
+    if (!isAdmin) return;
     final i = employees.indexWhere((x) => x.id == e.id);
     if (i >= 0) {
+      final old = employees[i];
+      final changes = [
+        if (old.salary != e.salary) 'gaji ${old.salary.toStringAsFixed(2)} → ${e.salary.toStringAsFixed(2)}',
+        if (old.allowance != e.allowance) 'elaun ${old.allowance.toStringAsFixed(2)} → ${e.allowance.toStringAsFixed(2)}',
+        if (old.bankAcc != e.bankAcc) 'akaun bank ditukar',
+        if (old.active != e.active) e.active ? 'diaktifkan semula' : 'ditanda berhenti',
+      ];
+      // Keep credentials and consent; the form never edits them.
+      e
+        ..pinHash = old.pinHash
+        ..pinSalt = old.pinSalt
+        ..consentAt = old.consentAt;
       employees[i] = e;
+      _log('Kemas kini pekerja', [e.name, ...changes].join(' · '));
     } else {
       employees.add(e);
+      _log('Tambah pekerja', '${e.name} · gaji ${e.salary.toStringAsFixed(2)}');
     }
     await _commit();
   }
@@ -426,17 +629,25 @@ class HrStore extends ChangeNotifier {
   String newEmployeeId() => 'e${_id()}';
 
   Future<void> postAnnouncement(String title, String body, bool pinned) async {
+    if (!isAdmin) return;
+    _log('Terbit pengumuman', title);
     announcements.add(Announcement(id: _id(), title: title, body: body, createdAt: now, pinned: pinned));
     await _commit();
   }
 
   Future<void> updateSettings(CompanySettings s) async {
+    if (!isAdmin) return;
     settings = s;
+    _log('Kemas kini tetapan',
+        'mula ${s.startTime} · radius ${s.radiusM.round()} m · selfie ${s.requireSelfie ? 'wajib' : 'tidak wajib'}');
     await _commit();
   }
 
   Future<void> resetDemo() async {
     _seed();
+    audit = [];
+    failedPins = {};
+    lockedUntil = {};
     currentUserId = null;
     await _commit();
   }
@@ -480,6 +691,9 @@ class HrStore extends ChangeNotifier {
         'announcements': announcements.map((e) => e.toJson()).toList(),
         'payruns': payruns.map((e) => e.toJson()).toList(),
         'settings': settings.toJson(),
+        'audit': audit.map((a) => a.toJson()).toList(),
+        'failedPins': failedPins,
+        'lockedUntil': lockedUntil,
         'currentUserId': currentUserId,
       };
 
@@ -494,6 +708,9 @@ class HrStore extends ChangeNotifier {
     announcements = list('announcements').map(Announcement.fromJson).toList();
     payruns = list('payruns').map(PayRun.fromJson).toList();
     settings = CompanySettings.fromJson(Map<String, dynamic>.from(j['settings'] ?? {}));
+    audit = list('audit').map(AuditEntry.fromJson).toList();
+    failedPins = Map<String, int>.from(j['failedPins'] ?? {});
+    lockedUntil = Map<String, String>.from(j['lockedUntil'] ?? {});
     currentUserId = j['currentUserId'];
   }
 
@@ -582,6 +799,13 @@ class HrStore extends ChangeNotifier {
           body: 'Semua staf diminta berkumpul di lobi pada Jumaat ini jam 3 petang.'),
     ];
 
+    // Demo PIN for every sample account; change it under Profil.
+    for (final e in employees) {
+      _setPin(e, demoPin);
+    }
+    employees.firstWhere((e) => e.id == 'e3').probationEnd = day(12);
+    employees.firstWhere((e) => e.id == 'e4').contractEnd = day(25);
+
     final prev = addMonths(ym(t), -1);
     payruns = [
       PayRun(
@@ -592,6 +816,14 @@ class HrStore extends ChangeNotifier {
     ];
     settings = CompanySettings();
   }
+}
+
+class Reminder {
+  const Reminder({required this.date, required this.title, this.empId, this.tone = 'mute'});
+  final DateTime date;
+  final String title;
+  final String? empId;
+  final String tone;
 }
 
 enum DayStatus { present, late, onLeave, absent, restDay, upcoming }

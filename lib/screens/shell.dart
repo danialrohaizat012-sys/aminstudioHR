@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 
 import '../store.dart';
@@ -21,6 +23,35 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   int index = 0;
+
+  // Sign out after a period without touches, so a phone left on the counter
+  // does not stay signed in to someone's payslips or the manager view.
+  static const idle = Duration(minutes: 10);
+  Timer? _idle;
+
+  @override
+  void initState() {
+    super.initState();
+    _bump();
+  }
+
+  @override
+  void dispose() {
+    _idle?.cancel();
+    super.dispose();
+  }
+
+  void _bump() {
+    _idle?.cancel();
+    _idle = Timer(idle, () {
+      if (!mounted) return;
+      final store = StoreScope.of(context);
+      final messenger = ScaffoldMessenger.of(context);
+      store.signOut();
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Dilog keluar kerana tiada aktiviti selama 10 minit')));
+    });
+  }
 
   void go(int i) => setState(() => index = i);
 
@@ -51,30 +82,67 @@ class _ShellState extends State<Shell> {
 
     final destinations = admin
         ? [
-            const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Utama'),
+            const NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home),
+                label: 'Utama'),
             NavigationDestination(
-              icon: Badge(isLabelVisible: pendingCount > 0, label: Text('$pendingCount'), child: const Icon(Icons.inbox_outlined)),
-              selectedIcon: Badge(isLabelVisible: pendingCount > 0, label: Text('$pendingCount'), child: const Icon(Icons.inbox)),
+              icon: Badge(
+                  isLabelVisible: pendingCount > 0,
+                  label: Text('$pendingCount'),
+                  child: const Icon(Icons.inbox_outlined)),
+              selectedIcon: Badge(
+                  isLabelVisible: pendingCount > 0,
+                  label: Text('$pendingCount'),
+                  child: const Icon(Icons.inbox)),
               label: 'Kelulusan',
             ),
-            const NavigationDestination(icon: Icon(Icons.people_outline), selectedIcon: Icon(Icons.people), label: 'Pekerja'),
-            const NavigationDestination(icon: Icon(Icons.payments_outlined), selectedIcon: Icon(Icons.payments), label: 'Gaji'),
-            const NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profil'),
+            const NavigationDestination(
+                icon: Icon(Icons.people_outline),
+                selectedIcon: Icon(Icons.people),
+                label: 'Pekerja'),
+            const NavigationDestination(
+                icon: Icon(Icons.payments_outlined),
+                selectedIcon: Icon(Icons.payments),
+                label: 'Gaji'),
+            const NavigationDestination(
+                icon: Icon(Icons.person_outline),
+                selectedIcon: Icon(Icons.person),
+                label: 'Profil'),
           ]
         : const [
-            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Utama'),
-            NavigationDestination(icon: Icon(Icons.schedule_outlined), selectedIcon: Icon(Icons.schedule), label: 'Hadir'),
-            NavigationDestination(icon: Icon(Icons.assignment_outlined), selectedIcon: Icon(Icons.assignment), label: 'Mohon'),
-            NavigationDestination(icon: Icon(Icons.receipt_outlined), selectedIcon: Icon(Icons.receipt), label: 'Slip'),
-            NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profil'),
+            NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home),
+                label: 'Utama'),
+            NavigationDestination(
+                icon: Icon(Icons.schedule_outlined),
+                selectedIcon: Icon(Icons.schedule),
+                label: 'Hadir'),
+            NavigationDestination(
+                icon: Icon(Icons.assignment_outlined),
+                selectedIcon: Icon(Icons.assignment),
+                label: 'Mohon'),
+            NavigationDestination(
+                icon: Icon(Icons.receipt_outlined),
+                selectedIcon: Icon(Icons.receipt),
+                label: 'Slip'),
+            NavigationDestination(
+                icon: Icon(Icons.person_outline),
+                selectedIcon: Icon(Icons.person),
+                label: 'Profil'),
           ];
 
-    return Scaffold(
-      body: IndexedStack(index: index, children: pages),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: index,
-        onDestinationSelected: go,
-        destinations: destinations,
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _bump(),
+      child: Scaffold(
+        body: IndexedStack(index: index, children: pages),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: index,
+          onDestinationSelected: go,
+          destinations: destinations,
+        ),
       ),
     );
   }

@@ -61,6 +61,11 @@ class Employee {
     this.leaveMedical = 14,
     this.isAdmin = false,
     this.active = true,
+    this.pinHash,
+    this.pinSalt,
+    this.probationEnd,
+    this.contractEnd,
+    this.consentAt,
   });
 
   final String id;
@@ -69,6 +74,19 @@ class Employee {
   double salary, allowance;
   int leaveAnnual, leaveMedical;
   bool isAdmin, active;
+  String? pinHash, pinSalt; // salted SHA-256 of the sign-in PIN, never the PIN itself
+  String? probationEnd, contractEnd; // yyyy-mm-dd
+  String? consentAt; // when the employee accepted the GPS/selfie privacy notice (PDPA)
+
+  /// Date of birth from a Malaysian IC (YYMMDD-PB-###G), or null.
+  DateTime? get birthDate {
+    final m = RegExp(r'^(\d{2})(\d{2})(\d{2})').firstMatch(ic.replaceAll('-', ''));
+    if (m == null) return null;
+    final yy = int.parse(m[1]!), mm = int.parse(m[2]!), dd = int.parse(m[3]!);
+    if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+    final century = yy > (DateTime.now().year % 100) ? 1900 : 2000;
+    return DateTime(century + yy, mm, dd);
+  }
 
   String get firstName => name.split(' ').first;
   String get initials => name
@@ -95,6 +113,11 @@ class Employee {
         'leaveMedical': leaveMedical,
         'isAdmin': isAdmin,
         'active': active,
+        'pinHash': pinHash,
+        'pinSalt': pinSalt,
+        'probationEnd': probationEnd,
+        'contractEnd': contractEnd,
+        'consentAt': consentAt,
       };
 
   factory Employee.fromJson(Map<String, dynamic> j) => Employee(
@@ -114,6 +137,11 @@ class Employee {
         leaveMedical: j['leaveMedical'] ?? 14,
         isAdmin: j['isAdmin'] ?? false,
         active: j['active'] ?? true,
+        pinHash: j['pinHash'],
+        pinSalt: j['pinSalt'],
+        probationEnd: j['probationEnd'],
+        contractEnd: j['contractEnd'],
+        consentAt: j['consentAt'],
       );
 }
 
@@ -138,6 +166,7 @@ class HrRequest {
     this.hours = 0,
     this.rate = 1.5,
     this.note = '',
+    this.receipt,
   });
 
   final String id;
@@ -161,10 +190,12 @@ class HrRequest {
   double hours, rate;
 
   String note;
+  String? receipt; // base64 JPEG of the claim receipt
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'kind': kind.name,
+        'receipt': receipt,
         'empId': empId,
         'createdAt': createdAt.toIso8601String(),
         'status': status.name,
@@ -201,18 +232,20 @@ class HrRequest {
         hours: (j['hours'] ?? 0).toDouble(),
         rate: (j['rate'] ?? 1.5).toDouble(),
         note: j['note'] ?? '',
+        receipt: j['receipt'],
       );
 }
 
 /// One side of a punch: where and how it was made.
 class PunchMark {
-  PunchMark({required this.time, this.lat, this.lng, this.accuracy, this.distance, this.photo, this.note = ''});
+  PunchMark({required this.time, this.lat, this.lng, this.accuracy, this.distance, this.photo, this.note = '', this.mocked = false});
 
   final String time; // HH:mm
   final double? lat, lng, accuracy; // accuracy in metres
   final double? distance; // metres from the office, when both are known
   final String? photo; // base64 JPEG selfie
   final String note; // reason given when punching outside the area
+  final bool mocked; // the device reported a mock (fake GPS) location
 
   bool get hasLocation => lat != null && lng != null;
 
@@ -224,6 +257,7 @@ class PunchMark {
         'distance': distance,
         'photo': photo,
         'note': note,
+        'mocked': mocked,
       };
 
   factory PunchMark.fromJson(Map<String, dynamic> j) => PunchMark(
@@ -234,6 +268,7 @@ class PunchMark {
         distance: (j['distance'] as num?)?.toDouble(),
         photo: j['photo'],
         note: j['note'] ?? '',
+        mocked: j['mocked'] ?? false,
       );
 }
 
@@ -474,4 +509,19 @@ class CompanySettings {
         requireLocation: j['requireLocation'] ?? true,
         requireSelfie: j['requireSelfie'] ?? true,
       );
+}
+
+/// Who did what and when. Written for every manager action.
+class AuditEntry {
+  AuditEntry({required this.at, required this.by, required this.action, this.detail = ''});
+
+  final DateTime at;
+  final String by; // display name of the signed-in user
+  final String action;
+  final String detail;
+
+  Map<String, dynamic> toJson() => {'at': at.toIso8601String(), 'by': by, 'action': action, 'detail': detail};
+
+  factory AuditEntry.fromJson(Map<String, dynamic> j) =>
+      AuditEntry(at: DateTime.parse(j['at']), by: j['by'] ?? '', action: j['action'] ?? '', detail: j['detail'] ?? '');
 }

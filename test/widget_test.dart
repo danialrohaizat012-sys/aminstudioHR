@@ -18,6 +18,16 @@ class FakeDevices implements PunchDevices {
       : const LocationFix(error: 'Lokasi (GPS) telefon dimatikan. Hidupkan dan cuba lagi.');
   @override
   Future<String?> selfie() async => _pixel;
+  @override
+  Future<String?> receipt() async => _pixel;
+}
+
+Future<void> enterPin(WidgetTester tester, String pin) async {
+  for (final d in pin.split('')) {
+    await tester.tap(find.byKey(ValueKey('pin-$d')));
+    await tester.pump();
+  }
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -35,12 +45,16 @@ void main() {
     expect(find.text('Log masuk sebagai'), findsOneWidget);
     await tester.tap(find.text('Hafiz Kamal'));
     await tester.pumpAndSettle();
+    await enterPin(tester, '000000');
+    expect(find.textContaining('PIN salah'), findsOneWidget);
+    await enterPin(tester, HrStore.demoPin);
     expect(find.text('Hai, Hafiz'), findsOneWidget);
 
     await store.signOut();
     await tester.pumpAndSettle();
     await tester.tap(find.text('Nurul Huda Ismail'));
     await tester.pumpAndSettle();
+    await enterPin(tester, HrStore.demoPin);
     expect(find.text('Hari ini'), findsOneWidget);
   });
 
@@ -51,12 +65,16 @@ void main() {
 
     final store = HrStore();
     await store.load();
+    await store.signInForTest('admin');
     await store.setOffice(6.1180, 102.2420);
-    await store.signIn('e2'); // seed leaves Hafiz without a punch today
+    await store.signInForTest('e2'); // seed leaves Hafiz without a punch today
     await tester.pumpWidget(PejabatHrApp(store: store));
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FilledButton, 'Punch masuk'));
+    await tester.pumpAndSettle();
+    expect(find.text('Notis privasi punch'), findsOneWidget);
+    await tester.tap(find.text('Setuju'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('Dalam kawasan kedai'), findsOneWidget);
@@ -88,11 +106,13 @@ void main() {
 
     final store = HrStore();
     await store.load();
-    await store.signIn('e2');
+    await store.signInForTest('e2');
     await tester.pumpWidget(PejabatHrApp(store: store));
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FilledButton, 'Punch masuk'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Setuju'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('Lokasi tidak tersedia'), findsOneWidget);

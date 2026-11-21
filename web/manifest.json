@@ -1,12 +1,12 @@
 {
     "name": "Amin Studio HR",
     "short_name": "Amin HR",
-    "start_url": ".",
+    "start_url": "/",
     "display": "standalone",
     "background_color": "#FFCE00",
     "theme_color": "#141414",
     "description": "Amin Studio HR: kehadiran, cuti, tuntutan dan gaji.",
-    "orientation": "portrait-primary",
+    "orientation": "portrait",
     "prefer_related_applications": false,
     "icons": [
         {
@@ -31,5 +31,13 @@
             "type": "image/png",
             "purpose": "maskable"
         }
+    ],
+    "id": "/",
+    "scope": "/",
+    "lang": "ms",
+    "dir": "ltr",
+    "categories": [
+        "business",
+        "productivity"
     ]
 }

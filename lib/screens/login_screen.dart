@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../store.dart';
 import '../widgets/brand.dart';
+import 'pin_sheet.dart';
 import '../widgets/common.dart';
 
 /// Demo sign-in: pick an account. A production build replaces this with
@@ -26,7 +27,7 @@ class LoginScreen extends StatelessWidget {
             const SizedBox(height: 32),
             Text('Log masuk sebagai', style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
-            Text('Versi demo: pilih akaun untuk mencuba. Data disimpan dalam peranti ini sahaja.',
+            Text('Versi demo: pilih akaun dan masukkan PIN demo ${HrStore.demoPin}. Tukar PIN di Profil selepas log masuk.',
                 style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
             const SizedBox(height: 16),
             _group(context, 'Pengurus HR', admins),
@@ -67,8 +68,12 @@ class LoginScreen extends StatelessWidget {
             leading: Avatar(e),
             title: Text(e.name, style: const TextStyle(fontWeight: FontWeight.w600)),
             subtitle: Text('${e.position} · ${e.dept}'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => store.signIn(e.id),
+            trailing: store.needsPin(e.id)
+                ? const Tag('Cipta PIN')
+                : store.lockMinutesLeft(e.id) > 0
+                    ? const Icon(Icons.lock_clock_outlined)
+                    : const Icon(Icons.chevron_right),
+            onTap: () => showPinSheet(context, e),
           ),
       ]),
     );

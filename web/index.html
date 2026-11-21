@@ -36,7 +36,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Amin Studio HR">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
@@ -55,5 +55,50 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async></script>
+  <!-- Install prompt: Android/desktop use the browser's install event;
+       iOS Safari has none, so it gets a one-line how-to instead. -->
+  <div id="install" role="dialog" aria-label="Pasang app" hidden>
+    <img src="icons/Icon-192.png" alt="" width="40" height="40">
+    <div class="txt"><b>Pasang Amin Studio HR</b><span id="install-hint">Buka terus dari skrin utama, macam app biasa.</span></div>
+    <button id="install-go" type="button">Pasang</button>
+    <button id="install-x" type="button" aria-label="Tutup">&times;</button>
+  </div>
+  <style>
+    #install{position:fixed;left:12px;right:12px;top:calc(12px + env(safe-area-inset-top,0px));z-index:9999;display:flex;align-items:center;gap:12px;
+      background:#141414;color:#fff;border-radius:16px;padding:12px 12px 12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.25);
+      font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;max-width:520px;margin:0 auto}
+    #install[hidden]{display:none}
+    #install img{border-radius:10px;flex:none}
+    #install .txt{flex:1;display:grid;gap:2px;min-width:0}
+    #install .txt span{color:#cfcfcf;font-size:12.5px}
+    #install-go{background:#FFCE00;color:#141414;border:0;border-radius:999px;padding:9px 16px;font-weight:700;cursor:pointer}
+    #install-x{background:none;border:0;color:#bbb;font-size:22px;line-height:1;cursor:pointer;padding:4px 6px}
+  </style>
+  <script>
+    (function () {
+      var box = document.getElementById('install'), go = document.getElementById('install-go');
+      var KEY = 'amin-hr-install-dismissed', evt = null;
+      function dismissed() { try { return localStorage.getItem(KEY) === '1'; } catch (e) { return false; } }
+      function hide() { box.hidden = true; try { localStorage.setItem(KEY, '1'); } catch (e) {} }
+      var standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+      if (standalone || dismissed()) return;
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault(); evt = e; box.hidden = false;
+      });
+      go.addEventListener('click', function () {
+        if (!evt) { hide(); return; }
+        evt.prompt();
+        evt.userChoice.finally(function () { evt = null; hide(); });
+      });
+      document.getElementById('install-x').addEventListener('click', hide);
+      window.addEventListener('appinstalled', hide);
+      var ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+      if (ios) {
+        document.getElementById('install-hint').textContent = 'Tekan butang Kongsi, kemudian "Add to Home Screen".';
+        go.textContent = 'Faham';
+        setTimeout(function () { box.hidden = false; }, 1500);
+      }
+    })();
+  </script>
 </body>
 </html>
