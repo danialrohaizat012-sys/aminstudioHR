@@ -52,6 +52,14 @@ Data disimpan dalam peranti (`shared_preferences`). "Set semula data demo" di sk
 
 Di web, lokasi memerlukan HTTPS (Vercel sudah HTTPS) dan selfie dibuka melalui kamera atau pemilih fail pelayar.
 
+## Operasi studio
+
+- **Roster syif.** Pengurus tetapkan syif setiap pekerja ikut hari (Biasa, Kahwin 07:00–23:00, Petang, atau Off) dan salin roster minggu lepas. Lewat dan balik awal dikira ikut syif; kerja hari Jumaat melalui roster dikira hari bekerja. Pekerja nampak jadual 7 hari di skrin Kehadiran.
+- **Job & komisen.** Rekod setiap job (kahwin, event, sesi studio, album) dengan staf terlibat dan komisen setiap orang. Komisen masuk gaji bulan itu dan tertera pada slip; job dikunci bila gaji dimuktamadkan.
+- **Kalendar pasukan.** Paparan bulan: cuti umum, siapa cuti (lulus/menunggu), job dan perubahan syif.
+- **Wizard permulaan.** Untuk syarikat sebenar: log masuk > "Mula syarikat baharu", kemudian wizard tetapkan waktu kerja, hari tutup, lokasi kedai, cuti umum dan import pekerja.
+- **Import pekerja dari Excel/CSV.** Salin sel dari Excel/Google Sheets atau pilih fail CSV. Tajuk lajur Bahasa Melayu atau Inggeris; baris bermasalah (nama/No. KP berulang, gaji atau tarikh salah) ditunjuk sebelum import. Hak cuti minimum dan tempoh percubaan 3 bulan diisi automatik.
+
 ## Struktur
 
 | Fail | Isi |

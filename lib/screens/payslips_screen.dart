@@ -129,6 +129,7 @@ class PayslipDetail extends StatelessWidget {
             if (l.extraAllowance > 0) row('Elaun tambahan', l.extraAllowance),
             if (l.bonus > 0) row('Bonus', l.bonus),
             if (l.commission > 0) row('Komisen', l.commission),
+            if (l.jobCommission > 0) row('Komisen job (${l.jobCount} job)', l.jobCommission),
             if (l.overtime > 0) row('Kerja lebih masa', l.overtime),
             if (l.unpaidLeave > 0) row('Cuti tanpa gaji', l.unpaidLeave, negative: true),
             const Divider(height: 16),

@@ -71,7 +71,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
                       title: Text(lines[i].name, style: const TextStyle(fontWeight: FontWeight.w600)),
                       subtitle: Text(
                         'Kasar ${rm(lines[i].gross)}${lines[i].overtime > 0 ? ' · OT ${rm(lines[i].overtime)}' : ''}'
-                        '${lines[i].bonus + lines[i].commission > 0 ? ' · bonus/komisen ${rm(lines[i].bonus + lines[i].commission)}' : ''}'
+                        '${lines[i].bonus + lines[i].commission + lines[i].jobCommission > 0 ? ' · bonus/komisen ${rm(lines[i].bonus + lines[i].commission + lines[i].jobCommission)}' : ''}'
                         '${lines[i].otherDeduction > 0 ? ' · potongan ${rm(lines[i].otherDeduction)}' : ''}'
                         '${lines[i].claims > 0 ? ' · tuntutan ${rm(lines[i].claims)}' : ''}',
                         style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),

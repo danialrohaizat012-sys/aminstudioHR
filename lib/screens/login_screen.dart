@@ -70,6 +70,13 @@ class LoginScreen extends StatelessWidget {
                     child: const Text('Set semula data demo'),
                   ),
                 ),
+                Center(
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.rocket_launch_outlined, size: 18),
+                    label: const Text('Mula syarikat baharu (guna sebenar)'),
+                    onPressed: () => _startFresh(context),
+                  ),
+                ),
               ],
             ),
           ),
@@ -104,5 +111,38 @@ class LoginScreen extends StatelessWidget {
           ),
       ]),
     );
+  }
+
+  Future<void> _startFresh(BuildContext context) async {
+    final store = StoreScope.of(context);
+    final company = TextEditingController(text: 'Amin Photo Studio');
+    final manager = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Mula syarikat baharu'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('Semua data demo dalam peranti ini akan dipadam. Anda akan jadi pengurus pertama, '
+              'cipta PIN, kemudian dibimbing untuk isi tetapan dan import pekerja.'),
+          const SizedBox(height: 14),
+          TextField(controller: company, decoration: const InputDecoration(labelText: 'Nama syarikat')),
+          const SizedBox(height: 10),
+          TextField(controller: manager, autofocus: true, decoration: const InputDecoration(labelText: 'Nama penuh anda (pengurus)')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Batal')),
+          FilledButton(
+            onPressed: () {
+              if (manager.text.trim().isEmpty || company.text.trim().isEmpty) return;
+              Navigator.pop(c, true);
+            },
+            child: const Text('Mula'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await store.startFresh(manager.text, company.text);
+    company.dispose();
+    manager.dispose();
   }
 }

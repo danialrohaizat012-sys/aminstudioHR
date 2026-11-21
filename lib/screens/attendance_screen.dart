@@ -5,6 +5,7 @@ import '../store.dart';
 import '../widgets/common.dart';
 import 'attendance_detail_screen.dart';
 import 'employee_home.dart';
+import 'roster_screen.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -31,6 +32,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       appBar: AppBar(title: const Text('Kehadiran')),
       body: PageList(children: [
         if (isThisMonth) const PunchCard(),
+        if (isThisMonth) MyScheduleCard(empId: me.id),
         Row(children: [
           IconButton(onPressed: () => setState(() => month = addMonths(month, -1)), icon: const Icon(Icons.chevron_left)),
           Expanded(child: Text(monthLabel(month), textAlign: TextAlign.center, style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700))),

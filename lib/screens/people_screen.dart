@@ -5,6 +5,7 @@ import '../models.dart';
 import '../store.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'setup_screens.dart';
 
 class PeopleScreen extends StatefulWidget {
   const PeopleScreen({super.key});
@@ -43,7 +44,13 @@ class _PeopleScreenState extends State<PeopleScreen> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: Text('Pekerja (${store.activeEmployees.length})')),
+      appBar: AppBar(title: Text('Pekerja (${store.activeEmployees.length})'), actions: [
+        IconButton(
+          tooltip: 'Import dari Excel / CSV',
+          icon: const Icon(Icons.upload_file),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const StaffImportScreen())),
+        ),
+      ]),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EmployeeForm())),
         icon: const Icon(Icons.person_add_alt),

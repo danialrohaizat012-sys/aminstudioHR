@@ -8,6 +8,10 @@ import '../widgets/common.dart';
 import 'announcements_screen.dart';
 import 'attendance_admin_screen.dart';
 import 'attendance_summary_screen.dart';
+import 'jobs_screen.dart';
+import 'roster_screen.dart';
+import 'setup_screens.dart';
+import 'team_calendar_screen.dart';
 import 'employee_home.dart';
 import 'punch_screen.dart';
 import 'punch_settings_screen.dart';
@@ -100,6 +104,18 @@ class AdminHome extends StatelessWidget {
             onTap: () => onGo(1),
           ),
         ]),
+        if (!store.settings.setupDone)
+          Card(
+            color: Theme.of(context).colorScheme.primaryContainer,
+            child: ListTile(
+              leading: const Icon(Icons.rocket_launch_outlined),
+              title: const Text('Lengkapkan tetapan permulaan'),
+              subtitle: const Text('Waktu kerja, lokasi kedai, cuti umum dan import pekerja. Kira-kira 5 minit.'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SetupWizardScreen())),
+            ),
+          ),
+        _Shortcuts(onAttendance: () => _openAttendance(context)),
         // Until the shop location is set, punch rules sit near the top.
         if (!store.settings.hasOffice) _PunchRulesCard(),
         Section(
@@ -281,4 +297,27 @@ String _when(DateTime d, DateTime now) {
   if (days == 0) return 'Hari ini';
   if (days == 1) return 'Esok';
   return '${d.day} ${monthsMs[d.month - 1].substring(0, 3)} · $days hari';
+}
+
+/// Manager tools that are not in the bottom navigation.
+class _Shortcuts extends StatelessWidget {
+  const _Shortcuts({required this.onAttendance});
+  final VoidCallback onAttendance;
+
+  @override
+  Widget build(BuildContext context) {
+    void go(Widget w) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => w));
+    Widget b(IconData i, String l, VoidCallback f) => FilledButton.tonalIcon(
+          onPressed: f,
+          icon: Icon(i, size: 18),
+          label: Text(l),
+          style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+        );
+    return Wrap(spacing: 8, runSpacing: 8, children: [
+      b(Icons.how_to_reg_outlined, 'Kehadiran', onAttendance),
+      b(Icons.view_week_outlined, 'Roster', () => go(const RosterScreen())),
+      b(Icons.photo_camera_outlined, 'Job & komisen', () => go(const JobsScreen())),
+      b(Icons.calendar_month_outlined, 'Kalendar', () => go(const TeamCalendarScreen())),
+    ]);
+  }
 }

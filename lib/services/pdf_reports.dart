@@ -60,6 +60,7 @@ Future<Uint8List> payslipPdf(String company, String month, PayLine l) {
       if (l.overtime > 0) _row('Kerja lebih masa', _rm(l.overtime)),
       if (l.bonus > 0) _row('Bonus', _rm(l.bonus)),
       if (l.commission > 0) _row('Komisen', _rm(l.commission)),
+      if (l.jobCommission > 0) _row('Komisen job (${l.jobCount} job)', _rm(l.jobCommission)),
       if (l.unpaidLeave > 0) _row('Cuti tanpa gaji', '-${_rm(l.unpaidLeave)}'),
       pw.Divider(color: _line),
       _row('Gaji kasar', _rm(l.gross), bold: true),

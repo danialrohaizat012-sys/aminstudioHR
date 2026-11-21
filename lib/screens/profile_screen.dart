@@ -5,7 +5,10 @@ import '../store.dart';
 import '../widgets/common.dart';
 import 'announcements_screen.dart';
 import 'audit_screen.dart';
+import 'jobs_screen.dart';
 import 'punch_settings_screen.dart';
+import 'roster_screen.dart';
+import 'setup_screens.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -247,6 +250,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                 ]),
               ]),
+            ),
+          ]),
+        ),
+        heading('Operasi studio'),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(children: [
+            ListTile(
+              leading: const Icon(Icons.view_week_outlined),
+              title: const Text('Syif kerja'),
+              subtitle: Text('${s.shifts.length + 1} syif'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ShiftsScreen())),
+            ),
+            const Divider(indent: 56),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Jenis job & kadar komisen'),
+              subtitle: Text('${s.jobTypes.length} jenis'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const JobTypesScreen())),
+            ),
+            const Divider(indent: 56),
+            ListTile(
+              leading: const Icon(Icons.checklist_outlined),
+              title: const Text('Wizard tetapan permulaan'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SetupWizardScreen())),
             ),
           ]),
         ),

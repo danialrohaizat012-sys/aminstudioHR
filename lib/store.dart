@@ -31,6 +31,8 @@ class HrStore extends ChangeNotifier {
   Map<String, int> failedPins = {};
   Map<String, String> lockedUntil = {}; // empId -> ISO time
   Map<String, PayAdjustment> adjustments = {}; // '<yyyy-mm>_<empId>'
+  Map<String, String> roster = {}; // '<empId>_<yyyy-mm-dd>' -> shift id, or 'off'
+  List<Job> jobs = [];
   Map<String, String> seenUpTo = {}; // empId -> ISO time the employee last opened their requests
 
   static const maxPinAttempts = 5;
@@ -324,7 +326,193 @@ class HrStore extends ChangeNotifier {
       attendance.values.where((a) => a.empId == empId && a.date.startsWith(monthKey)).toList()
         ..sort((a, b) => b.date.compareTo(a.date));
 
-  bool isLate(AttendanceRecord a) => a.clockIn != null && a.clockIn!.compareTo(settings.startTime) > 0;
+  /// The shift someone works on a date: their roster entry, else the normal
+  /// day on company working days. Null means a day off.
+  Shift? shiftFor(String empId, String date) {
+    final r = roster['${empId}_$date'];
+    if (r == 'off') return null;
+    if (r != null) {
+      for (final sh in settings.allShifts) {
+        if (sh.id == r) return sh;
+      }
+    }
+    return isWorkday(parseYmd(date)) ? settings.defaultShift : null;
+  }
+
+  /// Shift used to judge a record: the rostered one, or the normal day for
+  /// someone who came in on a day off.
+  Shift _shiftOf(AttendanceRecord a) => shiftFor(a.empId, a.date) ?? settings.defaultShift;
+
+  bool isLate(AttendanceRecord a) => a.clockIn != null && a.clockIn!.compareTo(_shiftOf(a).start) > 0;
+
+  Future<void> setRoster(String empId, String date, String? shiftId) async {
+    if (!isAdmin) return;
+    final key = '${empId}_$date';
+    if (shiftId == null) {
+      roster.remove(key);
+    } else {
+      roster[key] = shiftId;
+    }
+    await _commit();
+  }
+
+  /// Copy every roster entry from the week starting [fromMonday] to the week
+  /// starting [toMonday]. Returns how many entries were copied.
+  Future<int> copyRosterWeek(DateTime fromMonday, DateTime toMonday) async {
+    if (!isAdmin) return 0;
+    var n = 0;
+    for (var i = 0; i < 7; i++) {
+      final from = ymd(fromMonday.add(Duration(days: i))), to = ymd(toMonday.add(Duration(days: i)));
+      for (final e in staff) {
+        final v = roster['${e.id}_$from'];
+        final key = '${e.id}_$to';
+        if (v == null) {
+          roster.remove(key);
+        } else {
+          roster[key] = v;
+          n++;
+        }
+      }
+    }
+    _log('Salin roster', '${ymd(fromMonday)} → ${ymd(toMonday)} · $n entri');
+    await _commit();
+    return n;
+  }
+
+  Future<void> saveShift(Shift sh) async {
+    if (!isAdmin) return;
+    final i = settings.shifts.indexWhere((x) => x.id == sh.id);
+    if (i >= 0) {
+      settings.shifts[i] = sh;
+    } else {
+      settings.shifts.add(sh);
+    }
+    _log('Simpan syif', sh.label);
+    await _commit();
+  }
+
+  Future<void> deleteShift(String id) async {
+    if (!isAdmin) return;
+    settings.shifts.removeWhere((x) => x.id == id);
+    roster.removeWhere((_, v) => v == id);
+    _log('Padam syif', id);
+    await _commit();
+  }
+
+  // ---------------------------------------------------------------- jobs
+  JobType? jobType(String id) {
+    for (final t in settings.jobTypes) {
+      if (t.id == id) return t;
+    }
+    return null;
+  }
+
+  List<Job> jobsIn(String month, {String? empId}) => jobs
+      .where((j) => j.date.startsWith(month) && (empId == null || j.staff.containsKey(empId)))
+      .toList()
+    ..sort((a, b) => b.date.compareTo(a.date));
+
+  double jobCommission(String empId, String month) =>
+      round2(jobsIn(month, empId: empId).fold(0.0, (s, j) => s + (j.staff[empId] ?? 0)));
+
+  Future<String?> saveJob(Job j) async {
+    if (!isAdmin) return 'Hanya pengurus boleh merekod job.';
+    if (j.title.trim().isEmpty) return 'Isi nama job.';
+    if (j.staff.isEmpty) return 'Pilih sekurang-kurangnya seorang staf.';
+    if (j.staff.values.any((v) => v < 0 || v > 100000)) return 'Komisen tidak sah.';
+    final old = jobs.where((x) => x.id == j.id).firstOrNull;
+    for (final m in {j.date.substring(0, 7), if (old != null) old.date.substring(0, 7)}) {
+      if (payrun(m) != null) return 'Gaji ${monthLabel(m)} sudah dimuktamadkan. Buka semula dahulu.';
+    }
+    if (old != null) jobs.remove(old);
+    jobs.add(j);
+    _log(old == null ? 'Rekod job' : 'Kemas kini job',
+        '${j.title} · ${j.date} · ${j.staff.entries.map((e) => '${nameOf(e.key)} ${e.value.toStringAsFixed(2)}').join(', ')}');
+    await _commit();
+    return null;
+  }
+
+  Future<String?> deleteJob(String id) async {
+    if (!isAdmin) return 'Hanya pengurus boleh memadam job.';
+    final j = jobs.where((x) => x.id == id).firstOrNull;
+    if (j == null) return null;
+    if (payrun(j.date.substring(0, 7)) != null) return 'Gaji bulan ini sudah dimuktamadkan.';
+    jobs.remove(j);
+    _log('Padam job', '${j.title} · ${j.date}');
+    await _commit();
+    return null;
+  }
+
+  String newId() => _id();
+
+  Future<int> importEmployees(List<Employee> list) async {
+    if (!isAdmin || list.isEmpty) return 0;
+    employees.addAll(list);
+    _log('Import pekerja', '${list.length} orang: ${list.map((e) => e.name).join(', ')}');
+    await _commit();
+    return list.length;
+  }
+
+  Future<void> finishSetup() async {
+    if (!isAdmin) return;
+    settings.setupDone = true;
+    _log('Tetapan permulaan selesai');
+    await _commit();
+  }
+
+  /// Wipe the demo and start a real company with one manager, who creates a
+  /// PIN at first sign-in and is then guided through setup.
+  Future<void> startFresh(String managerName, String companyName) async {
+    employees = [
+      Employee(
+        id: 'm${_id()}',
+        name: managerName.trim(),
+        position: 'Pengurus',
+        dept: 'Pengurusan',
+        joinDate: DateTime(now.year, now.month, now.day),
+        isAdmin: true,
+        leaveAnnual: 8,
+        leaveMedical: 14,
+      ),
+    ];
+    requests = [];
+    attendance = {};
+    announcements = [];
+    payruns = [];
+    audit = [];
+    adjustments = {};
+    roster = {};
+    jobs = [];
+    seenUpTo = {};
+    failedPins = {};
+    lockedUntil = {};
+    settings = CompanySettings(name: companyName.trim(), setupDone: false);
+    currentUserId = null;
+    await _commit();
+  }
+
+  /// Fixed-date federal holidays for [year]. Islamic, Chinese, Hindu and
+  /// Kelantan state holidays move each year and must be added by hand.
+  static List<(String, String)> fixedHolidays(int year) {
+    var agong = DateTime(year, 6, 1); // first Monday of June
+    while (agong.weekday != DateTime.monday) {
+      agong = agong.add(const Duration(days: 1));
+    }
+    return [
+      ('$year-05-01', 'Hari Pekerja'),
+      (ymd(agong), 'Hari Keputeraan Yang di-Pertuan Agong'),
+      ('$year-08-31', 'Hari Kebangsaan'),
+      ('$year-09-16', 'Hari Malaysia'),
+      ('$year-12-25', 'Hari Krismas'),
+    ];
+  }
+
+  Future<void> saveJobTypes(List<JobType> types) async {
+    if (!isAdmin) return;
+    settings.jobTypes = types;
+    _log('Kemas kini jenis job', types.map((x) => '${x.name} ${x.rate.toStringAsFixed(2)}').join(', '));
+    await _commit();
+  }
 
   List<HrRequest> onLeave(String date) => requests
       .where((r) =>
@@ -384,7 +572,9 @@ class HrStore extends ChangeNotifier {
     final adj = adjustments['${month}_${e.id}'] ?? PayAdjustment();
     // Bonus and commission are treated as part of this month's wages for EPF,
     // SOCSO, EIS and the simplified PCB.
-    final gross = round2(e.salary + e.allowance + ot + adj.bonus + adj.commission + adj.extraAllowance - unpaid);
+    final jobPay = jobCommission(e.id, month);
+    final gross =
+        round2(e.salary + e.allowance + ot + adj.bonus + adj.commission + adj.extraAllowance + jobPay - unpaid);
     final st = statutory(gross);
     final ded = st.epfEe + st.socsoEe + st.eisEe + st.pcb;
     return PayLine(
@@ -413,6 +603,8 @@ class HrStore extends ChangeNotifier {
       extraAllowance: adj.extraAllowance,
       otherDeduction: adj.otherDeduction,
       adjustNote: adj.note,
+      jobCommission: jobPay,
+      jobCount: jobsIn(month, empId: e.id).length,
     );
   }
 
@@ -563,7 +755,7 @@ class HrStore extends ChangeNotifier {
 
   /// Minutes after the start time, or 0.
   int lateMinutes(AttendanceRecord r) =>
-      r.clockIn == null ? 0 : math.max(0, _min(r.clockIn!) - _min(settings.startTime));
+      r.clockIn == null ? 0 : math.max(0, _min(r.clockIn!) - _min(_shiftOf(r).start));
 
   /// One employee's month: days present, late (with total minutes and dates),
   /// absent, on leave, early leaves and hours worked. Counts up to today.
@@ -604,8 +796,11 @@ class HrStore extends ChangeNotifier {
     return sum;
   }
 
-  bool isEarlyLeave(AttendanceRecord r) =>
-      r.clockOut != null && r.clockOut!.compareTo(settings.endTime) < 0 && isWorkday(parseYmd(r.date));
+  bool isEarlyLeave(AttendanceRecord r) {
+    final sh = shiftFor(r.empId, r.date);
+    if (r.clockOut == null || sh == null || sh.overnight) return false;
+    return r.clockOut!.compareTo(sh.end) < 0;
+  }
 
   /// HR correction of a day's times. Clearing both removes the record.
   Future<void> correctAttendance(String empId, String date, String? clockIn, String? clockOut) async {
@@ -631,7 +826,7 @@ class HrStore extends ChangeNotifier {
       return isLate(rec!) ? DayStatus.late : DayStatus.present;
     }
     if (onLeave(date).any((r) => r.empId == e.id)) return DayStatus.onLeave;
-    if (!isWorkday(parseYmd(date))) return DayStatus.restDay;
+    if (shiftFor(e.id, date) == null) return DayStatus.restDay;
     if (date.compareTo(ymd(now)) > 0) return DayStatus.upcoming;
     return DayStatus.absent;
   }
@@ -970,6 +1165,8 @@ class HrStore extends ChangeNotifier {
         'lockedUntil': lockedUntil,
         'seenUpTo': seenUpTo,
         'themeChoice': themeChoice,
+        'roster': roster,
+        'jobs': jobs.map((j) => j.toJson()).toList(),
         'adjustments': adjustments.map((k, v) => MapEntry(k, v.toJson())),
         'currentUserId': currentUserId,
       };
@@ -990,6 +1187,8 @@ class HrStore extends ChangeNotifier {
     lockedUntil = Map<String, String>.from(j['lockedUntil'] ?? {});
     seenUpTo = Map<String, String>.from(j['seenUpTo'] ?? {});
     themeChoice = j['themeChoice'] ?? 'system';
+    roster = Map<String, String>.from(j['roster'] ?? {});
+    jobs = list('jobs').map(Job.fromJson).toList();
     adjustments = (j['adjustments'] as Map? ?? {})
         .map((k, v) => MapEntry(k as String, PayAdjustment.fromJson(Map<String, dynamic>.from(v))));
     currentUserId = j['currentUserId'];
@@ -1000,6 +1199,12 @@ class HrStore extends ChangeNotifier {
   void seedForTest() => _seed();
 
   void _seed() {
+    settings = CompanySettings(shifts: [
+      Shift(id: 'kahwin', name: 'Kahwin', start: '07:00', end: '23:00'),
+      Shift(id: 'petang', name: 'Petang', start: '13:00', end: '22:00'),
+    ]);
+    roster = {};
+    jobs = [];
     final t = now;
     employees = [
       Employee(
@@ -1105,7 +1310,34 @@ class HrStore extends ChangeNotifier {
     employees.firstWhere((e) => e.id == 'e3').probationEnd = day(12);
     employees.firstWhere((e) => e.id == 'e4').contractEnd = day(25);
 
+    // Next weekend: a wedding shoot for two staff, a day off in lieu after it.
+    var sat = DateTime(t.year, t.month, t.day);
+    while (sat.weekday != DateTime.saturday) {
+      sat = sat.add(const Duration(days: 1));
+    }
+    for (final id in ['e3', 'e4']) {
+      roster['${id}_${ymd(sat)}'] = 'kahwin';
+      roster['${id}_${ymd(sat.add(const Duration(days: 1)))}'] = 'kahwin';
+      roster['${id}_${ymd(sat.add(const Duration(days: 2)))}'] = 'off';
+    }
+    roster['e1_${ymd(sat)}'] = 'petang';
+
     final prev = addMonths(ym(t), -1);
+    String inMonth(String m, int d) => '$m-${two(d)}';
+    final cur = ym(t);
+    jobs = [
+      Job(id: 'j1', date: inMonth(prev, 7), title: 'Kahwin Farah & Danish (Pengkalan Chepa)', typeId: 'kahwin',
+          staff: {'e3': 150, 'e4': 150}, createdAt: ago(40)),
+      Job(id: 'j2', date: inMonth(prev, 21), title: 'Majlis hari jadi Syarikat Ikhlas', typeId: 'event',
+          staff: {'e4': 100}, createdAt: ago(28)),
+      Job(id: 'j3', date: inMonth(cur, 1), title: 'Kahwin Nadia & Irfan (Kota Bharu)', typeId: 'kahwin',
+          staff: {'e3': 150, 'e1': 150}, createdAt: ago(t.day - 1)),
+      Job(id: 'j4', date: inMonth(cur, 8), title: 'Sesi studio keluarga Haji Zaki', typeId: 'studio',
+          staff: {'e3': 30}, createdAt: ago(math.max(0, t.day - 8))),
+      Job(id: 'j5', date: inMonth(cur, math.min(t.day, 15)), title: 'Edit album Nadia & Irfan', typeId: 'album',
+          staff: {'e2': 50}, createdAt: ago(1)),
+    ];
+
     payruns = [
       PayRun(
         month: prev,
@@ -1113,7 +1345,6 @@ class HrStore extends ChangeNotifier {
         lines: employees.where((e) => e.salary > 0).map((e) => computeLine(e, prev)).toList(),
       ),
     ];
-    settings = CompanySettings();
   }
 }
 

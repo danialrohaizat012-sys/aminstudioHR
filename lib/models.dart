@@ -422,6 +422,8 @@ class PayLine {
     this.extraAllowance = 0,
     this.otherDeduction = 0,
     this.adjustNote = '',
+    this.jobCommission = 0,
+    this.jobCount = 0,
   });
 
   final String empId, name, position, ic, bank, bankAcc;
@@ -431,6 +433,8 @@ class PayLine {
   final double bonus, commission, extraAllowance; // one-off earnings this month
   final double otherDeduction; // e.g. salary advance repayment
   final String adjustNote;
+  final double jobCommission; // from jobs recorded this month
+  final int jobCount;
 
   double get deductions => epfEe + socsoEe + eisEe + pcb + otherDeduction;
   double get employerCost => gross + epfEr + socsoEr + eisEr + claims;
@@ -461,6 +465,8 @@ class PayLine {
         'extraAllowance': extraAllowance,
         'otherDeduction': otherDeduction,
         'adjustNote': adjustNote,
+        'jobCommission': jobCommission,
+        'jobCount': jobCount,
       };
 
   factory PayLine.fromJson(Map<String, dynamic> j) {
@@ -491,6 +497,8 @@ class PayLine {
       extraAllowance: d('extraAllowance'),
       otherDeduction: d('otherDeduction'),
       adjustNote: j['adjustNote'] ?? '',
+      jobCommission: d('jobCommission'),
+      jobCount: (j['jobCount'] ?? 0) as int,
     );
   }
 }
@@ -533,7 +541,12 @@ class CompanySettings {
     this.radiusM = 150,
     this.requireLocation = true,
     this.requireSelfie = true,
-  })  : holidays = holidays ?? [],
+    List<Shift>? shifts,
+    List<JobType>? jobTypes,
+    this.setupDone = true,
+  })  : shifts = shifts ?? [],
+        jobTypes = jobTypes ?? defaultJobTypes(),
+        holidays = holidays ?? [],
         holidayNames = holidayNames ?? {},
         weekendDays = weekendDays ?? [DateTime.friday];
 
@@ -553,6 +566,14 @@ class CompanySettings {
 
   bool get hasOffice => officeLat != null && officeLng != null;
 
+  /// Extra shifts besides the normal day (startTime–endTime).
+  List<Shift> shifts;
+  List<JobType> jobTypes;
+  bool setupDone; // false until the first-time setup wizard is finished
+
+  Shift get defaultShift => Shift(id: 'biasa', name: 'Biasa', start: startTime, end: endTime);
+  List<Shift> get allShifts => [defaultShift, ...shifts];
+
   Map<String, dynamic> toJson() => {
         'name': name,
         'startTime': startTime,
@@ -565,6 +586,9 @@ class CompanySettings {
         'radiusM': radiusM,
         'requireLocation': requireLocation,
         'requireSelfie': requireSelfie,
+        'shifts': shifts.map((x) => x.toJson()).toList(),
+        'jobTypes': jobTypes.map((x) => x.toJson()).toList(),
+        'setupDone': setupDone,
       };
 
   factory CompanySettings.fromJson(Map<String, dynamic> j) => CompanySettings(
@@ -585,6 +609,11 @@ class CompanySettings {
         radiusM: (j['radiusM'] as num?)?.toDouble() ?? 150,
         requireLocation: j['requireLocation'] ?? true,
         requireSelfie: j['requireSelfie'] ?? true,
+        shifts: (j['shifts'] as List? ?? []).map((x) => Shift.fromJson(Map<String, dynamic>.from(x))).toList(),
+        jobTypes: j['jobTypes'] == null
+            ? null
+            : (j['jobTypes'] as List).map((x) => JobType.fromJson(Map<String, dynamic>.from(x))).toList(),
+        setupDone: j['setupDone'] ?? true,
       );
 }
 
@@ -626,5 +655,81 @@ class PayAdjustment {
         extraAllowance: (j['extraAllowance'] ?? 0).toDouble(),
         otherDeduction: (j['otherDeduction'] ?? 0).toDouble(),
         note: j['note'] ?? '',
+      );
+}
+
+/// A working pattern, e.g. "Kahwin 07:00–23:00". Times are HH:mm; an end
+/// earlier than the start runs past midnight.
+class Shift {
+  Shift({required this.id, required this.name, required this.start, required this.end});
+  final String id;
+  String name, start, end;
+
+  bool get overnight => end.compareTo(start) <= 0;
+  String get label => '$name $start–$end';
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'start': start, 'end': end};
+  factory Shift.fromJson(Map<String, dynamic> j) =>
+      Shift(id: j['id'], name: j['name'] ?? '', start: j['start'] ?? '09:00', end: j['end'] ?? '18:00');
+}
+
+/// Kind of studio job with the usual commission per person.
+class JobType {
+  JobType({required this.id, required this.name, required this.rate});
+  final String id;
+  String name;
+  double rate;
+
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'rate': rate};
+  factory JobType.fromJson(Map<String, dynamic> j) =>
+      JobType(id: j['id'], name: j['name'] ?? '', rate: (j['rate'] ?? 0).toDouble());
+}
+
+List<JobType> defaultJobTypes() => [
+      JobType(id: 'kahwin', name: 'Penggambaran kahwin', rate: 150),
+      JobType(id: 'event', name: 'Majlis / event', rate: 100),
+      JobType(id: 'studio', name: 'Sesi studio', rate: 30),
+      JobType(id: 'album', name: 'Edit album', rate: 50),
+    ];
+
+/// A job done for a client, with the staff who worked on it and the
+/// commission each earns. Commission is paid with that month's salary.
+class Job {
+  Job({
+    required this.id,
+    required this.date,
+    required this.title,
+    required this.typeId,
+    required this.staff,
+    this.note = '',
+    required this.createdAt,
+  });
+
+  final String id;
+  String date; // yyyy-mm-dd
+  String title, typeId, note;
+  Map<String, double> staff; // empId -> commission
+  final DateTime createdAt;
+
+  double get total => staff.values.fold(0.0, (s, v) => s + v);
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'date': date,
+        'title': title,
+        'typeId': typeId,
+        'staff': staff,
+        'note': note,
+        'createdAt': createdAt.toIso8601String(),
+      };
+
+  factory Job.fromJson(Map<String, dynamic> j) => Job(
+        id: j['id'],
+        date: j['date'],
+        title: j['title'] ?? '',
+        typeId: j['typeId'] ?? '',
+        staff: (j['staff'] as Map? ?? {}).map((k, v) => MapEntry(k as String, (v as num).toDouble())),
+        note: j['note'] ?? '',
+        createdAt: DateTime.parse(j['createdAt']),
       );
 }

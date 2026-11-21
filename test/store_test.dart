@@ -37,7 +37,8 @@ void main() {
     final e3 = s.employeeById('e3')!;
     final line = s.computeLine(e3, '2026-11');
     expect(line.overtime, closeTo(2800 / 26 / 8 * 2 * 4, .01));
-    expect(line.gross, closeTo(2800 + 150 + line.overtime, .01));
+    expect(line.jobCommission, s.jobCommission('e3', '2026-11'));
+    expect(line.gross, closeTo(2800 + 150 + line.overtime + line.jobCommission, .01));
   });
 
   test('finalised payroll produces payslips for the employee', () async {
@@ -332,7 +333,8 @@ void main() {
       await s.finalizePayroll('2026-11');
       expect(await s.setAdjustment('2026-11', 'e2', PayAdjustment(bonus: 1)), contains('dimuktamadkan'));
       final year = s.yearTotals(2026);
-      expect(year.firstWhere((r) => r.name == e.name).gross, closeTo(l.gross + base.gross, 1)); // Oct + Nov
+      final oct = s.payrun('2026-10')!.lines.firstWhere((x) => x.empId == 'e2').gross;
+      expect(year.firstWhere((r) => r.name == e.name).gross, closeTo(l.gross + oct, .01)); // Oct + Nov
     });
 
     test('length of service and statutory leave minimums', () {

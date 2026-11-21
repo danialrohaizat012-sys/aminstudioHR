@@ -12,6 +12,7 @@ import 'announcements_screen.dart';
 import 'payslips_screen.dart';
 import 'punch_screen.dart';
 import 'request_forms.dart';
+import 'team_calendar_screen.dart';
 
 class EmployeeHome extends StatelessWidget {
   const EmployeeHome({super.key, required this.onGo});
@@ -26,6 +27,7 @@ class EmployeeHome extends StatelessWidget {
     final recent = store.requestsOf(me.id).take(3).toList();
     final slips = store.payslipsOf(me.id);
     final anns = sortedAnnouncements(store);
+    final myJobs = store.jobsIn(ym(store.now), empId: me.id);
 
     return Scaffold(
       appBar: AppBar(
@@ -115,6 +117,40 @@ class EmployeeHome extends StatelessWidget {
                     const Icon(Icons.chevron_right),
                   ]),
                 ),
+        ),
+        if (myJobs.isNotEmpty)
+          Section(
+            title: 'Job saya · ${monthsMs[store.now.month - 1]}',
+            action: Text(rm(store.jobCommission(me.id, ym(store.now))),
+                style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+            child: Column(children: [
+              for (final j in myJobs.take(4))
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Row(children: [
+                    Icon(Icons.photo_camera_outlined, size: 20, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(j.title, style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                        Text(fmtDate(j.date), style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                      ]),
+                    ),
+                    Text(rm(j.staff[me.id] ?? 0), style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              Text('Komisen dibayar bersama gaji bulan ini.', style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+            ]),
+          ),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(
+            leading: const Icon(Icons.calendar_month_outlined),
+            title: const Text('Kalendar pasukan'),
+            subtitle: const Text('Siapa cuti, cuti umum dan job bulan ini'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TeamCalendarScreen())),
+          ),
         ),
         Section(
           title: 'Permohonan saya',
@@ -244,12 +280,10 @@ class _PunchCardState extends State<PunchCard> {
     final t = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
     final late = rec != null && store.isLate(rec);
-    final workday = store.isWorkday(now);
+    final shift = store.shiftFor(store.me!.id, ymd(now));
 
     final status = rec?.clockIn == null
-        ? (workday
-            ? 'Waktu mula kerja ${store.settings.startTime}'
-            : 'Hari rehat')
+        ? (shift != null ? 'Syif ${shift.label}' : 'Hari rehat')
         : rec!.clockOut == null
             ? rec.openBreak != null
                 ? '${rec.openBreak!.label} sejak ${rec.openBreak!.start}'
